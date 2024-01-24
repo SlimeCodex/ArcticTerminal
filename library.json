@@ -1,0 +1,23 @@
+{
+	"name": "ArcticTerminal",
+	"version": "1.0.0",
+	"description": "BLE-based console management for ESP32.",
+	"keywords": ["BLE", "Bluetooth", "ESP32", "Console", "Communication"],
+	"repository": {
+	  "type": "git",
+	  "url": "https://github.com/SlimeCodex/ArcticTerminal"
+	},
+	"authors": [
+	  {
+		"name": "Alejandro Nicolini",
+		"email": "slimecodex@gmail.com"
+	  }
+	],
+	"license": "GPL-3.0",
+	"homepage": "https://github.com/SlimeCodex",
+	"dependencies": {
+	  "h2zero/NimBLE-Arduino": "^1.4.1"
+	},
+	"frameworks": "arduino",
+	"platforms": "esp32"
+  }
