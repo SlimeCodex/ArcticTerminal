@@ -31,10 +31,67 @@ ArcticClient::ArcticClient(const std::string& bleDeviceName) {
 }
 
 // Begin: Initialize BLE
-void ArcticClient::begin() {
-	NimBLEDevice::init(_bleDeviceName);
-	pServer = NimBLEDevice::createServer();
-	pServer->setCallbacks(new ATCallbacks());
+void ArcticClient::begin(uint8_t interface) {
+	// Initialize interface
+	switch (interface) {
+		case ARCTIC_BLUETOOTH:
+			// Initialize BLE
+			NimBLEDevice::init(_bleDeviceName);
+			pServer = NimBLEDevice::createServer();
+			pServer->setCallbacks(new ATCallbacks());
+			break;
+		case ARCTIC_USB:
+			// Initialize USB
+			_uart_interface->begin(_bauds);
+			break;
+		case ARCTIC_WIFI:
+			// Initialize WiFi
+			// TODO: Implement WiFi
+			break;
+	}
+}
+
+// Interface: Set interface
+void ArcticClient::interface(HardwareSerial& uart_interface) {
+	_uart_interface = &uart_interface;
+}
+
+// Baudrate: Set baudrate
+void ArcticClient::baudrate(uint32_t bauds) {
+	_bauds = bauds;
+}
+
+void serverTask(void* pvParameters) {
+	_wifi_server->begin(_socket_port);
+	while (1) {
+		_wifi_client = _wifi_server->available();
+		if (!client) {
+			delay(50);
+			continue;
+		}
+		// Wait until the client sends some data
+		while (client.connected()) {
+			if (client.available()) {
+			}
+		}
+	}
+}
+
+// Connect: Connect to WiFi
+void ArcticClient::connect(const std::string& ssid, const std::string& password, uint16_t socket_port) {
+	_ssid = ssid;
+	_password = password;
+	_socket_port = socket_port;
+	WiFi.begin(ssid.c_str(), password.c_str());
+	while (WiFi.status() != WL_CONNECTED) {
+		delay(100);
+	}
+	xTaskCreatePinnedToCore(serverTask, "ServerTask", 10000, NULL, 1, NULL, 0);
+}
+
+// Disconnect: Disconnect from WiFi
+void ArcticClient::disconnect() {
+	WiFi.disconnect();
 }
 
 // Add console to global map
@@ -126,4 +183,8 @@ void ArcticClient::createService(NimBLEAdvertising* existingAdvertising) {
 
 bool ArcticClient::connected() {
 	return ArcticClient::arctic_connection_status;
+}
+
+void interface(uint8_t interface) {
+
 }

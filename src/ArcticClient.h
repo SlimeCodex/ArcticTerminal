@@ -20,23 +20,33 @@
 
 #include <Arduino.h>
 #include <functional>
+#include <map>
 #include <sstream>
 #include <string>
 #include <vector>
-#include <map>
 
 #include <NimBLEDevice.h>
+#include <HardwareSerial.h>
 
+#include <WiFi.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+#include <ArcticCommand.h>
 #include <ArcticOTA.h>
 #include <ArcticTerminal.h>
-#include <ArcticCommand.h>
 
 // Enumeration for connection profiles
-#define ARCTIC_PROFILE_HIGH_SPEED 0x00
+#define ARCTIC_PROFILE_HIGH_SPEED 0x00 // default
 #define ARCTIC_PROFILE_BALANCED 0x01
 #define ARCTIC_PROFILE_POWER_SAVING 0x02
 #define ARCTIC_PROFILE_LONG_RANGE 0x03
 #define ARCTIC_PROFILE_MAX_SPEED 0x04
+
+// Enumeration for interfaces
+#define ARCTIC_BLUETOOTH 0x00 // default
+#define ARCTIC_USB 0x01
+#define ARCTIC_WIFI 0x02
 
 // Some OS may require this services to be enabled
 #ifdef ARCTIC_ENABLE_DEFAULT_SERVICES
@@ -61,7 +71,11 @@ struct BLEConnParams {
 class ArcticClient {
 public:
 	ArcticClient(const std::string& bleDeviceName = "ArcticTerminal");
-	void begin();
+	void begin(uint8_t interface = ARCTIC_BLUETOOTH);
+	void interface(HardwareSerial& uart_interface);
+	void baudrate(uint32_t bauds);
+	void connect(const std::string& ssid, const std::string& password, uint16_t socket_port);
+	void disconnect();
 	void add(ArcticTerminal& console); // Register data console
 	void start();
 	void profile(uint8_t profile);
@@ -75,10 +89,18 @@ public:
 	NimBLECharacteristic* _rxCharacteristic;
 
 private:
+	uint8_t _active_interface;
+	HardwareSerial* _uart_interface;
+	WiFiClient* _wifi_client;
+	WiFiServer* _wifi_server;
 	std::string _bleDeviceName;
 	bool _debug_enabled = false;
 	bool _ota_console = false;
 	NimBLEServer* pServer;
 	NimBLEAdvertising* pAdvertising;
 	std::vector<std::reference_wrapper<ArcticTerminal>> consoles;
+	uint32_t _bauds = 115200;
+	uint16_t _socket_port = 13200;
+	std::string _ssid;
+	std::string _password;
 };
