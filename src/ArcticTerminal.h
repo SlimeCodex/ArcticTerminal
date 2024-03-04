@@ -35,6 +35,7 @@ public:
 	ArcticTerminal(const std::string& monitorName);
 
 	void start(NimBLEServer* existingServer, NimBLEAdvertising* existingAdvertising);
+	void start();
 	void printf(const char* format, ...);
 	void singlef(const char* format, ...);
 	bool available();
@@ -44,15 +45,25 @@ public:
 	std::vector<uint8_t> raw();
 
 	int createService(NimBLEAdvertising* existingAdvertising);
+	int createServiceUUID();
+
 	void setNewDataAvailable(bool available, std::string command);
 
 private:
 	bool _debug_enabled = false;
 
+	// Used for Bluetooth
 	struct ServiceCharacteristics {
 		NimBLECharacteristic* txCharacteristic;
 		NimBLECharacteristic* txsCharacteristic;
 		NimBLECharacteristic* rxCharacteristic;
+	};
+
+	// Used for WiFi and UART
+	struct ServiceStringUUIDs {
+		std::string txStringUUID;
+		std::string txsStringUUID;
+		std::string rxStringUUID;
 	};
 
 	std::string _monitorName;
@@ -64,4 +75,6 @@ private:
 
 	std::atomic<bool> newDataAvailable{false};
 	std::map<int, ServiceCharacteristics> services;
+
+	std::map<int, ServiceStringUUIDs> serialServices;
 };

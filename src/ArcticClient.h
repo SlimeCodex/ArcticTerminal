@@ -45,8 +45,17 @@
 
 // Enumeration for interfaces
 #define ARCTIC_BLUETOOTH 0x00 // default
-#define ARCTIC_USB 0x01
 #define ARCTIC_WIFI 0x02
+#define ARCTIC_UART 0x01
+
+// Default Device Name for BLE
+#define ARCTIC_DEFAULT_DEVICE_NAME "ArcticTerminal"
+
+// Default Port for WiFi
+#define ARCTIC_DEFAULT_PORT 56320
+
+// Default Baudrate for UART
+#define ARCTIC_DEFAULT_BAUDS 115200
 
 // Some OS may require this services to be enabled
 #ifdef ARCTIC_ENABLE_DEFAULT_SERVICES
@@ -68,14 +77,31 @@ struct BLEConnParams {
 	uint16_t mtu;
 };
 
+// Structure to hold the UART connection parameters
+struct UARTConnParams {
+	uint32_t bauds;
+	uint8_t data;
+	uint8_t stop;
+	uint8_t parity;
+};
+
+// Structure to hold the WiFi connection parameters
+struct WiFiConnParams {
+	std::string ssid;
+	std::string password;
+	uint16_t port;
+};
+
 class ArcticClient {
 public:
-	ArcticClient(const std::string& bleDeviceName = "ArcticTerminal");
+	ArcticClient(const std::string& bleDeviceName = ARCTIC_DEFAULT_DEVICE_NAME);
 	void begin(uint8_t interface = ARCTIC_BLUETOOTH);
 	void interface(HardwareSerial& uart_interface);
-	void baudrate(uint32_t bauds);
-	void connect(const std::string& ssid, const std::string& password, uint16_t socket_port);
+	void baudrate(uint32_t bauds = ARCTIC_DEFAULT_BAUDS);
+	void connect(const std::string& ssid, const std::string& password, uint16_t socket_port = ARCTIC_DEFAULT_PORT);
 	void disconnect();
+	static void arctic_server_task(void* pvParameters);
+	void server_task();
 	void add(ArcticTerminal& console); // Register data console
 	void start();
 	void profile(uint8_t profile);
@@ -83,6 +109,9 @@ public:
 	void createService(NimBLEAdvertising* existingAdvertising);
 	bool connected();
 	static bool arctic_connection_status;
+	static uint8_t arctic_interface;
+	static WiFiServer* _wifi_server;
+	static WiFiClient _wifi_client;
 	static BLEConnParams arctic_cparams;
 	ArcticOTA ota;
 	NimBLECharacteristic* _txCharacteristic;
@@ -91,16 +120,14 @@ public:
 private:
 	uint8_t _active_interface;
 	HardwareSerial* _uart_interface;
-	WiFiClient* _wifi_client;
-	WiFiServer* _wifi_server;
 	std::string _bleDeviceName;
 	bool _debug_enabled = false;
 	bool _ota_console = false;
 	NimBLEServer* pServer;
 	NimBLEAdvertising* pAdvertising;
 	std::vector<std::reference_wrapper<ArcticTerminal>> consoles;
-	uint32_t _bauds = 115200;
-	uint16_t _socket_port = 13200;
+	uint32_t _bauds = ARCTIC_DEFAULT_BAUDS;
+	uint16_t _socket_port = ARCTIC_DEFAULT_PORT;
 	std::string _ssid;
 	std::string _password;
 };

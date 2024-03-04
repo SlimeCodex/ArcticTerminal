@@ -21,7 +21,11 @@
 
 // Initialize static variables
 bool ArcticClient::arctic_connection_status = false;
+uint8_t ArcticClient::arctic_interface = ARCTIC_BLUETOOTH;
 BLEConnParams ArcticClient::arctic_cparams = {0, 0, 0, 0};
+
+WiFiServer* ArcticClient::_wifi_server = nullptr;
+WiFiClient ArcticClient::_wifi_client;
 
 // Constructor for handler
 ArcticClient::ArcticClient(const std::string& bleDeviceName) {
@@ -34,19 +38,18 @@ ArcticClient::ArcticClient(const std::string& bleDeviceName) {
 void ArcticClient::begin(uint8_t interface) {
 	// Initialize interface
 	switch (interface) {
-		case ARCTIC_BLUETOOTH:
-			// Initialize BLE
+		case ARCTIC_BLUETOOTH: // default
+			ArcticClient::arctic_interface = ARCTIC_BLUETOOTH;
 			NimBLEDevice::init(_bleDeviceName);
 			pServer = NimBLEDevice::createServer();
 			pServer->setCallbacks(new ATCallbacks());
 			break;
-		case ARCTIC_USB:
-			// Initialize USB
+		case ARCTIC_UART: // UART interface
+			ArcticClient::arctic_interface = ARCTIC_UART;
 			_uart_interface->begin(_bauds);
 			break;
-		case ARCTIC_WIFI:
-			// Initialize WiFi
-			// TODO: Implement WiFi
+		case ARCTIC_WIFI: // WiFi interface
+			ArcticClient::arctic_interface = ARCTIC_WIFI;
 			break;
 	}
 }
@@ -61,37 +64,77 @@ void ArcticClient::baudrate(uint32_t bauds) {
 	_bauds = bauds;
 }
 
-void serverTask(void* pvParameters) {
-	_wifi_server->begin(_socket_port);
-	while (1) {
-		_wifi_client = _wifi_server->available();
-		if (!client) {
-			delay(50);
-			continue;
-		}
-		// Wait until the client sends some data
-		while (client.connected()) {
-			if (client.available()) {
-			}
-		}
-	}
-}
-
 // Connect: Connect to WiFi
 void ArcticClient::connect(const std::string& ssid, const std::string& password, uint16_t socket_port) {
 	_ssid = ssid;
 	_password = password;
 	_socket_port = socket_port;
+
+	// Connect to WiFi
 	WiFi.begin(ssid.c_str(), password.c_str());
 	while (WiFi.status() != WL_CONNECTED) {
 		delay(100);
 	}
-	xTaskCreatePinnedToCore(serverTask, "ServerTask", 10000, NULL, 1, NULL, 0);
+	IPAddress ip = WiFi.localIP();
+	Serial.println(ip);
+
+	// Start WiFi server
+	_wifi_server = new WiFiServer(_socket_port);
+	xTaskCreatePinnedToCore(arctic_server_task, "ArcticServerTask", 4096, this, 1, NULL, 0);
 }
 
 // Disconnect: Disconnect from WiFi
-void ArcticClient::disconnect() {
+void ArcticClient::disconnect() { // TODO: CAUSES CRASH
 	WiFi.disconnect();
+	delete _wifi_server;
+	_wifi_server = nullptr;
+}
+
+// Static wrapper function
+void ArcticClient::arctic_server_task(void *pvParameters) {
+	ArcticClient *instance = static_cast<ArcticClient*>(pvParameters); // Cast to ArcticClient pointer
+	instance->server_task(); // Call the actual task method
+}
+
+void ArcticClient::server_task() {
+	_wifi_server->begin();
+	while (1) {
+		WiFiClient client = _wifi_server->available();
+
+		// Update WiFi client
+		if (client) {
+			_wifi_client = client;
+
+			// Read data from client
+			if (_wifi_client.connected()) {
+				while (_wifi_client.available()) {
+					std::string command;
+					while (_wifi_client.available()) {
+						char c = _wifi_client.read();
+						if (c == '\n') break;
+						command += c;
+					}
+
+					// Respond to ARCTIC_GET_MAC
+					if (command == "ARCTIC_COMMAND_GET_DEVICE") {
+                        std::string mac = WiFi.macAddress().c_str();
+                        std::string response = _bleDeviceName + "," + mac;
+                        _wifi_client.println(response.c_str());
+					}
+				}
+			}
+		}
+
+		// Update connection status
+		if (_wifi_client.connected()) {
+			ArcticClient::arctic_connection_status = true;
+		}
+		else {
+			ArcticClient::arctic_connection_status = false;
+		}
+
+		vTaskDelay(pdMS_TO_TICKS(10));
+	}
 }
 
 // Add console to global map
@@ -101,47 +144,57 @@ void ArcticClient::add(ArcticTerminal& console) {
 
 // Start: Start BLE server and advertising
 void ArcticClient::start() {
-	// Initialize services and characteristics
-	pAdvertising = NimBLEDevice::getAdvertising();
+	if (ArcticClient::arctic_interface == ARCTIC_BLUETOOTH) {
+		// Initialize services and characteristics
+		pAdvertising = NimBLEDevice::getAdvertising();
 
-#ifdef ARCTIC_ENABLE_DEFAULT_SERVICES
-	// Some OS may require this services to be enabled
+	#ifdef ARCTIC_ENABLE_DEFAULT_SERVICES
+		// Some OS may require this services to be enabled
 
-	// HID Service
-	NimBLEService* pService = pServer->createService(BLEUUID((uint16_t)BLE_UUID_HUMAN_INTERFACE_DEVICE_SERVICE));
-	NimBLECharacteristic* pCharacteristic = pService->createCharacteristic(BLEUUID((uint16_t)BLE_UUID_HID_INFORMATION_CHAR), NIMBLE_PROPERTY::READ);
-	pCharacteristic = pService->createCharacteristic(BLEUUID((uint16_t)BLE_UUID_REPORT_MAP_CHAR), NIMBLE_PROPERTY::READ);
-	pCharacteristic = pService->createCharacteristic(BLEUUID((uint16_t)BLE_UUID_HID_CONTROL_POINT_CHAR), NIMBLE_PROPERTY::READ);
-	pCharacteristic = pService->createCharacteristic(BLEUUID((uint16_t)BLE_UUID_REPORT_CHAR), NIMBLE_PROPERTY::READ);
-	pService->start();
-	pAdvertising->addServiceUUID(pService->getUUID());
+		// HID Service
+		NimBLEService* pService = pServer->createService(BLEUUID((uint16_t)BLE_UUID_HUMAN_INTERFACE_DEVICE_SERVICE));
+		NimBLECharacteristic* pCharacteristic = pService->createCharacteristic(BLEUUID((uint16_t)BLE_UUID_HID_INFORMATION_CHAR), NIMBLE_PROPERTY::READ);
+		pCharacteristic = pService->createCharacteristic(BLEUUID((uint16_t)BLE_UUID_REPORT_MAP_CHAR), NIMBLE_PROPERTY::READ);
+		pCharacteristic = pService->createCharacteristic(BLEUUID((uint16_t)BLE_UUID_HID_CONTROL_POINT_CHAR), NIMBLE_PROPERTY::READ);
+		pCharacteristic = pService->createCharacteristic(BLEUUID((uint16_t)BLE_UUID_REPORT_CHAR), NIMBLE_PROPERTY::READ);
+		pService->start();
+		pAdvertising->addServiceUUID(pService->getUUID());
 
-	// Battery Service
-	pService = pServer->createService(BLEUUID((uint16_t)BLE_UUID_BATTERY_SERVICE));
-	pCharacteristic = pService->createCharacteristic(BLEUUID((uint16_t)BLE_UUID_BATTERY_LEVEL_CHAR), NIMBLE_PROPERTY::READ);
-	pService->start();
-	pAdvertising->addServiceUUID(pService->getUUID());
+		// Battery Service
+		pService = pServer->createService(BLEUUID((uint16_t)BLE_UUID_BATTERY_SERVICE));
+		pCharacteristic = pService->createCharacteristic(BLEUUID((uint16_t)BLE_UUID_BATTERY_LEVEL_CHAR), NIMBLE_PROPERTY::READ);
+		pService->start();
+		pAdvertising->addServiceUUID(pService->getUUID());
 
-	// Device Information Service
-	pService = pServer->createService(BLEUUID((uint16_t)BLE_UUID_DEVICE_INFORMATION_SERVICE));
-	pService->start();
-	pAdvertising->addServiceUUID(pService->getUUID());
-#endif
+		// Device Information Service
+		pService = pServer->createService(BLEUUID((uint16_t)BLE_UUID_DEVICE_INFORMATION_SERVICE));
+		pService->start();
+		pAdvertising->addServiceUUID(pService->getUUID());
+	#endif
 
-	// Create system (background) service
-	createService(pAdvertising);
+		// Create system (background) service
+		createService(pAdvertising);
 
-	// Start OTA service
-	ota.start(pServer, pAdvertising);
+		// Start OTA service
+		ota.start(pServer, pAdvertising);
 
-	// Start consoles
-	for (auto& console : consoles) {
-		console.get().start(pServer, pAdvertising);
+		// Start consoles
+		for (auto& console : consoles) {
+			console.get().start(pServer, pAdvertising);
+		}
+
+		// Start advertising
+		if (!pAdvertising->isAdvertising()) {
+			pAdvertising->start();
+		}
 	}
 
-	// Start advertising
-	if (!pAdvertising->isAdvertising()) {
-		pAdvertising->start();
+	// Handle interface for WiFi and UART
+	if (ArcticClient::arctic_interface == ARCTIC_WIFI || ArcticClient::arctic_interface == ARCTIC_UART) {
+		// Start consoles
+		for (auto& console : consoles) {
+			console.get().start();
+		}
 	}
 }
 

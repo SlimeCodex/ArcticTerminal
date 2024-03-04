@@ -31,43 +31,79 @@ ArcticTerminal::ArcticTerminal(const std::string& monitorName) {
 
 // Start: Create server and service
 void ArcticTerminal::start(NimBLEServer* existingServer, NimBLEAdvertising* existingAdvertising) {
-	if (existingServer != nullptr) {
-		pServer = existingServer;
+	if (ArcticClient::arctic_interface == ARCTIC_BLUETOOTH) {
+		if (existingServer != nullptr) {
+			pServer = existingServer;
+		}
+		serviceID = createService(existingAdvertising);
 	}
-	serviceID = createService(existingAdvertising);
+}
+
+// Start: Create server and service
+void ArcticTerminal::start() {
+	if (ArcticClient::arctic_interface == ARCTIC_WIFI || ArcticClient::arctic_interface == ARCTIC_UART) {
+		serviceID = createServiceUUID();
+	}
 }
 
 // Create service: Create console with TX, TXS, RX and Name Characteristics
 int ArcticTerminal::createService(NimBLEAdvertising* existingAdvertising) {
 
-	// Create service
-	char serviceUUID[37];
-	snprintf(serviceUUID, sizeof(serviceUUID), "4fafc201-1fb5-459e-3%03x-c5c9c3319f%02x", serviceCount, serviceCount);
-	NimBLEService* pService = pServer->createService(serviceUUID);
+	// Assign UUIDs for Bluetooth
+	if (ArcticClient::arctic_interface == ARCTIC_BLUETOOTH) {
 
-	// TX
-	char txCharUUID[37];
-	snprintf(txCharUUID, sizeof(txCharUUID), "4fafc201-1fb5-459e-3%03x-c5c9c3319a%02x", serviceCount, serviceCount);
-	NimBLECharacteristic* txCharacteristic = pService->createCharacteristic(txCharUUID, NIMBLE_PROPERTY::NOTIFY);
+		// Create service
+		char serviceUUID[37];
+		snprintf(serviceUUID, sizeof(serviceUUID), "4fafc201-1fb5-459e-3%03x-c5c9c3319f%02x", serviceCount, serviceCount);
+		NimBLEService* pService = pServer->createService(serviceUUID);
 
-	// TX (single)
-	char txsCharUUID[37];
-	snprintf(txsCharUUID, sizeof(txsCharUUID), "4fafc201-1fb5-459e-3%03x-c5c9c3319b%02x", serviceCount, serviceCount);
-	NimBLECharacteristic* txsCharacteristic = pService->createCharacteristic(txsCharUUID, NIMBLE_PROPERTY::NOTIFY);
+		// TX
+		char txCharUUID[37];
+		snprintf(txCharUUID, sizeof(txCharUUID), "4fafc201-1fb5-459e-3%03x-c5c9c3319a%02x", serviceCount, serviceCount);
+		NimBLECharacteristic* txCharacteristic = pService->createCharacteristic(txCharUUID, NIMBLE_PROPERTY::NOTIFY);
 
-	// RX
-	char rxCharUUID[37];
-	snprintf(rxCharUUID, sizeof(rxCharUUID), "4fafc201-1fb5-459e-3%03x-c5c9c3319c%02x", serviceCount, serviceCount);
-	NimBLECharacteristic* rxCharacteristic = pService->createCharacteristic(rxCharUUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
-	rxCharacteristic->setCallbacks(new RxCharacteristicCallbacks(this));
+		// TX (single)
+		char txsCharUUID[37];
+		snprintf(txsCharUUID, sizeof(txsCharUUID), "4fafc201-1fb5-459e-3%03x-c5c9c3319b%02x", serviceCount, serviceCount);
+		NimBLECharacteristic* txsCharacteristic = pService->createCharacteristic(txsCharUUID, NIMBLE_PROPERTY::NOTIFY);
 
-	// Start the service
-	pService->start();
-	existingAdvertising->addServiceUUID(pService->getUUID());
+		// RX
+		char rxCharUUID[37];
+		snprintf(rxCharUUID, sizeof(rxCharUUID), "4fafc201-1fb5-459e-3%03x-c5c9c3319c%02x", serviceCount, serviceCount);
+		NimBLECharacteristic* rxCharacteristic = pService->createCharacteristic(rxCharUUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
+		rxCharacteristic->setCallbacks(new RxCharacteristicCallbacks(this));
 
-	// Add service to map
-	services[serviceCount] = ServiceCharacteristics{txCharacteristic, txsCharacteristic, rxCharacteristic};
-	return serviceCount++;
+		// Start the service
+		pService->start();
+		existingAdvertising->addServiceUUID(pService->getUUID());
+
+		// Add service to map
+		services[serviceCount] = ServiceCharacteristics{txCharacteristic, txsCharacteristic, rxCharacteristic};
+		return serviceCount++;
+	}
+	return -1;
+}
+
+int ArcticTerminal::createServiceUUID() {
+	// Assign UUIDs for WiFi and UART
+	if (ArcticClient::arctic_interface == ARCTIC_WIFI || ArcticClient::arctic_interface == ARCTIC_UART) {
+
+		// TX
+		char txCharUUID[37];
+		snprintf(txCharUUID, sizeof(txCharUUID), "4fafc201-1fb5-459e-3%03x-c5c9c3319a%02x", serviceCount, serviceCount);
+
+		// TX (single)
+		char txsCharUUID[37];
+		snprintf(txsCharUUID, sizeof(txsCharUUID), "4fafc201-1fb5-459e-3%03x-c5c9c3319b%02x", serviceCount, serviceCount);
+
+		// RX
+		char rxCharUUID[37];
+		snprintf(rxCharUUID, sizeof(rxCharUUID), "4fafc201-1fb5-459e-3%03x-c5c9c3319c%02x", serviceCount, serviceCount);
+
+		serialServices[serviceCount] = ServiceStringUUIDs{txCharUUID, txsCharUUID, rxCharUUID};
+		return serviceCount++;
+	}
+	return -1;
 }
 
 // Printf TX: Multiline TX with format
@@ -76,22 +112,43 @@ void ArcticTerminal::printf(const char* format, ...) {
 	if (serviceID == -1) {
 		return;
 	}
+
 	char buffer[512];
 	va_list args;
 	va_start(args, format);
 	vsnprintf(buffer, sizeof(buffer), format, args);
 
-	auto servicePair = services.find(serviceID);
-	if (servicePair != services.end()) {
-		if (pServer->getConnectedCount() > 0) {
-			NimBLECharacteristic* txCharacteristic = servicePair->second.txCharacteristic;
-			if (txCharacteristic) {
-				txCharacteristic->setValue((uint8_t*)buffer, strlen(buffer));
-				txCharacteristic->notify(true);
+	if (ArcticClient::arctic_interface == ARCTIC_BLUETOOTH) {
+		auto servicePair = services.find(serviceID);
+		if (servicePair != services.end()) {
+			if (pServer->getConnectedCount() > 0) {
+				NimBLECharacteristic* txCharacteristic = servicePair->second.txCharacteristic;
+				if (txCharacteristic) {
+					txCharacteristic->setValue((uint8_t*)buffer, strlen(buffer));
+					txCharacteristic->notify(true);
+				}
+			}
+		}
+		va_end(args);
+	}
+
+	if (ArcticClient::arctic_interface == ARCTIC_WIFI) {
+		if (ArcticClient::_wifi_client && ArcticClient::_wifi_client.connected()) {
+			auto servicePair = serialServices.find(serviceID);
+			if (servicePair != serialServices.end()) {
+				// concatenate the serial string with the buffer
+				std::string txString = servicePair->second.txStringUUID;
+				txString += ":";
+				txString += buffer;
+				txString += "\n";
+
+				ArcticClient::_wifi_client.print(txString.c_str());
 			}
 		}
 	}
-	va_end(args);
+
+	if (ArcticClient::arctic_interface == ARCTIC_UART) {
+	}
 }
 
 // Singlef TX: Single line TX with format
