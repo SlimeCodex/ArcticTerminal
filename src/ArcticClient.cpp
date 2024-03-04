@@ -115,11 +115,22 @@ void ArcticClient::server_task() {
 						command += c;
 					}
 
-					// Respond to ARCTIC_GET_MAC
+					// Respond to name and MAC address
 					if (command == "ARCTIC_COMMAND_GET_DEVICE") {
+						std::string response_com = "ARCTIC_COMMAND_GET_DEVICE:";
                         std::string mac = WiFi.macAddress().c_str();
-                        std::string response = _bleDeviceName + "," + mac;
+                        std::string response = response_com + _bleDeviceName + "," + mac;
                         _wifi_client.println(response.c_str());
+					}
+
+					// Respond to services available
+					if (command == "ARCTIC_COMMAND_GET_SERVICES") {
+						std::string response_com = "ARCTIC_COMMAND_GET_SERVICES:";
+						std::string response = response_com;
+						for (auto& console : consoles) {
+							response += "," + console.get()._monitorName;
+						}
+						_wifi_client.println(response.c_str());
 					}
 				}
 			}
