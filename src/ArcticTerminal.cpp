@@ -88,19 +88,23 @@ int ArcticTerminal::createServiceUUID() {
 	// Assign UUIDs for WiFi and UART
 	if (ArcticClient::arctic_interface == ARCTIC_WIFI || ArcticClient::arctic_interface == ARCTIC_UART) {
 
-		// TX
-		char txCharUUID[37];
-		snprintf(txCharUUID, sizeof(txCharUUID), "4fafc201-1fb5-459e-3%03x-c5c9c3319a%02x", serviceCount, serviceCount);
+		// Service
+		char uuid_service[6];
+		snprintf(uuid_service, sizeof(uuid_service), "ATS%02x", serviceCount);
+
+		// TX (multiline)
+		char uuid_txm[6];
+		snprintf(uuid_txm, sizeof(uuid_txm), "TXM%02x", serviceCount);
 
 		// TX (single)
-		char txsCharUUID[37];
-		snprintf(txsCharUUID, sizeof(txsCharUUID), "4fafc201-1fb5-459e-3%03x-c5c9c3319b%02x", serviceCount, serviceCount);
+		char uuid_txs[6];
+		snprintf(uuid_txs, sizeof(uuid_txs), "TXS%02x", serviceCount);
 
 		// RX
-		char rxCharUUID[37];
-		snprintf(rxCharUUID, sizeof(rxCharUUID), "4fafc201-1fb5-459e-3%03x-c5c9c3319c%02x", serviceCount, serviceCount);
+		char uuid_rxm[6];
+		snprintf(uuid_rxm, sizeof(uuid_rxm), "RXM%02x", serviceCount);
 
-		serialServices[serviceCount] = ServiceStringUUIDs{txCharUUID, txsCharUUID, rxCharUUID};
+		serialServices[serviceCount] = ServiceStringUUIDs{uuid_service, uuid_txm, uuid_txs, uuid_rxm};
 		return serviceCount++;
 	}
 	return -1;
@@ -118,6 +122,7 @@ void ArcticTerminal::printf(const char* format, ...) {
 	va_start(args, format);
 	vsnprintf(buffer, sizeof(buffer), format, args);
 
+	// Bluetooth
 	if (ArcticClient::arctic_interface == ARCTIC_BLUETOOTH) {
 		auto servicePair = services.find(serviceID);
 		if (servicePair != services.end()) {
@@ -129,26 +134,37 @@ void ArcticTerminal::printf(const char* format, ...) {
 				}
 			}
 		}
-		va_end(args);
 	}
 
+	// WiFi
 	if (ArcticClient::arctic_interface == ARCTIC_WIFI) {
-		if (ArcticClient::_wifi_client && ArcticClient::_wifi_client.connected()) {
-			auto servicePair = serialServices.find(serviceID);
-			if (servicePair != serialServices.end()) {
-				// concatenate the serial string with the buffer
-				std::string txString = servicePair->second.txStringUUID;
-				txString += ":";
-				txString += buffer;
-				txString += "\n";
+		auto servicePair = serialServices.find(serviceID);
+		if (servicePair != serialServices.end()) {
+			// concatenate the serial string with the buffer
+			std::string txString = servicePair->second.uuid_txm;
+			txString += ":";
+			txString += buffer;
+			txString += "\n";
 
-				ArcticClient::_wifi_client.print(txString.c_str());
-			}
+			ArcticClient::_uplink_client.print(txString.c_str());
 		}
 	}
 
+	// UART
 	if (ArcticClient::arctic_interface == ARCTIC_UART) {
+		auto servicePair = serialServices.find(serviceID);
+		if (servicePair != serialServices.end()) {
+			// concatenate the serial string with the buffer
+			std::string txString = servicePair->second.uuid_txm;
+			txString += ":";
+			txString += buffer;
+			txString += "\n";
+
+			ArcticClient::_uart_port->print(txString.c_str());
+		}
 	}
+
+	va_end(args);
 }
 
 // Singlef TX: Single line TX with format
@@ -162,14 +178,47 @@ void ArcticTerminal::singlef(const char* format, ...) {
 	va_start(args, format);
 	vsnprintf(buffer, sizeof(buffer), format, args);
 
-	auto servicePair = services.find(serviceID);
-	if (servicePair != services.end()) {
-		if (pServer->getConnectedCount() > 0) {
-			NimBLECharacteristic* txsCharacteristic = servicePair->second.txsCharacteristic;
-			if (txsCharacteristic) {
-				txsCharacteristic->setValue((uint8_t*)buffer, strlen(buffer));
-				txsCharacteristic->notify();
+	// Bluetooth
+	if (ArcticClient::arctic_interface == ARCTIC_BLUETOOTH) {
+		auto servicePair = services.find(serviceID);
+		if (servicePair != services.end()) {
+			if (pServer->getConnectedCount() > 0) {
+				NimBLECharacteristic* txsCharacteristic = servicePair->second.txsCharacteristic;
+				if (txsCharacteristic) {
+					txsCharacteristic->setValue((uint8_t*)buffer, strlen(buffer));
+					txsCharacteristic->notify();
+				}
 			}
+		}
+	}
+
+	// WiFi
+	if (ArcticClient::arctic_interface == ARCTIC_WIFI) {
+		if (ArcticClient::_uplink_client && ArcticClient::_uplink_client.connected()) {
+			auto servicePair = serialServices.find(serviceID);
+			if (servicePair != serialServices.end()) {
+				// concatenate the serial string with the buffer
+				std::string txString = servicePair->second.uuid_txs;
+				txString += ":";
+				txString += buffer;
+				txString += "\n";
+
+				ArcticClient::_uplink_client.print(txString.c_str());
+			}
+		}
+	}
+
+	// UART
+	if (ArcticClient::arctic_interface == ARCTIC_UART) {
+		auto servicePair = serialServices.find(serviceID);
+		if (servicePair != serialServices.end()) {
+			// concatenate the serial string with the buffer
+			std::string txString = servicePair->second.uuid_txs;
+			txString += ":";
+			txString += buffer;
+			txString += "\n";
+
+			ArcticClient::_uart_port->print(txString.c_str());
 		}
 	}
 
@@ -178,12 +227,27 @@ void ArcticTerminal::singlef(const char* format, ...) {
 
 // Updates new data flag
 void ArcticTerminal::setNewDataAvailable(bool available, std::string command) {
-	// Process background commands for console
+	// Process backend commands for console
 	ArcticCommand com = ArcticCommand(command);
 	if (com.base() == "ARCTIC_COMMAND_GET_NAME") {
 		singlef("ARCTIC_COMMAND_REQ_NAME:%s", _monitorName.c_str());
 		newDataAvailable = false;
 		return;
+	}
+
+	// Bluetooth
+	if (ArcticClient::arctic_interface == ARCTIC_BLUETOOTH) {
+		// We do nothing becase the data is already handled by the callback
+	}
+
+	// WiFi
+	if (ArcticClient::arctic_interface == ARCTIC_WIFI) {
+		_wifi_command = command;
+	}
+
+	// UART
+	if (ArcticClient::arctic_interface == ARCTIC_UART) {
+		_uart_command = command;
 	}
 	newDataAvailable = available;
 }
@@ -199,15 +263,38 @@ bool ArcticTerminal::available() {
 // Read RX: Read RX data until delimiter
 std::string ArcticTerminal::read(char delimiter) {
 	if (!ArcticClient::arctic_connection_status) return std::string();
-	auto servicePair = services.find(serviceID);
-	if (servicePair != services.end()) {
-		NimBLECharacteristic* rxCharacteristic = servicePair->second.rxCharacteristic;
-		if (rxCharacteristic) {
-			std::string value = rxCharacteristic->getValue();
-			std::stringstream valueStream(value);
-			std::string line;
-			std::getline(valueStream, line, delimiter);
-			return line;
+
+	// Bluetooth
+	if (ArcticClient::arctic_interface == ARCTIC_BLUETOOTH) {
+		auto servicePair = services.find(serviceID);
+		if (servicePair != services.end()) {
+			NimBLECharacteristic* rxCharacteristic = servicePair->second.rxCharacteristic;
+			if (rxCharacteristic) {
+				std::string value = rxCharacteristic->getValue();
+				size_t pos = value.find(delimiter);
+				if (pos != std::string::npos) {
+					std::string data = value.substr(0, pos);
+					rxCharacteristic->setValue(value.substr(pos + 1));
+					return data;
+				}
+			}
+		}
+	}
+
+	// WiFi
+	if (ArcticClient::arctic_interface == ARCTIC_WIFI) {
+		std::string command = _wifi_command;
+		return command;
+	}
+
+	// UART
+	if (ArcticClient::arctic_interface == ARCTIC_UART) {
+		std::string command = _uart_command;
+		size_t pos = command.find(delimiter);
+		if (pos != std::string::npos) {
+			std::string data = command.substr(0, pos);
+			_uart_command = command.substr(pos + 1);
+			return data;
 		}
 	}
 	return std::string();
@@ -215,15 +302,28 @@ std::string ArcticTerminal::read(char delimiter) {
 
 // Read RX: Read raw RX data as vector
 std::vector<uint8_t> ArcticTerminal::raw() {
-	if (!ArcticClient::arctic_connection_status) return std::vector<uint8_t>();
-	auto servicePair = services.find(serviceID);
-	if (servicePair != services.end()) {
-		NimBLECharacteristic* rxCharacteristic = servicePair->second.rxCharacteristic;
-		if (rxCharacteristic) {
-			std::string value = rxCharacteristic->getValue();
-			std::vector<uint8_t> bytes(value.begin(), value.end());
-			return bytes;
+
+	// Bluetooth
+	if (ArcticClient::arctic_interface == ARCTIC_BLUETOOTH) {
+		auto servicePair = services.find(serviceID);
+		if (servicePair != services.end()) {
+			NimBLECharacteristic* rxCharacteristic = servicePair->second.rxCharacteristic;
+			if (rxCharacteristic) {
+				return rxCharacteristic->getValue();
+			}
 		}
+	}
+
+	// WiFi
+	if (ArcticClient::arctic_interface == ARCTIC_WIFI) {
+		std::string command = _wifi_command;
+		return std::vector<uint8_t>(command.begin(), command.end());
+	}
+
+	// UART
+	if (ArcticClient::arctic_interface == ARCTIC_UART) {
+		std::string command = _uart_command;
+		return std::vector<uint8_t>(command.begin(), command.end());
 	}
 	return std::vector<uint8_t>();
 }
@@ -234,4 +334,28 @@ void ArcticTerminal::hide() {
 
 void ArcticTerminal::show() {
 	singlef("ARCTIC_COMMAND_SHOW");
+}
+
+std::string ArcticTerminal::get_name() {
+	return _monitorName;
+}
+
+std::string ArcticTerminal::get_uuid_ats() {
+	auto servicePair = serialServices.find(serviceID);
+	return serialServices[serviceID].uuid_ats;
+}
+
+std::string ArcticTerminal::get_uuid_txm() {
+	auto servicePair = serialServices.find(serviceID);
+	return serialServices[serviceID].uuid_txm;
+}
+
+std::string ArcticTerminal::get_uuid_txs() {
+	auto servicePair = serialServices.find(serviceID);
+	return serialServices[serviceID].uuid_txs;
+}
+
+std::string ArcticTerminal::get_uuid_rxm() {
+	auto servicePair = serialServices.find(serviceID);
+	return serialServices[serviceID].uuid_rxm;
 }

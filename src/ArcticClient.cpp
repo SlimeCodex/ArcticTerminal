@@ -24,8 +24,12 @@ bool ArcticClient::arctic_connection_status = false;
 uint8_t ArcticClient::arctic_interface = ARCTIC_BLUETOOTH;
 BLEConnParams ArcticClient::arctic_cparams = {0, 0, 0, 0};
 
-WiFiServer* ArcticClient::_wifi_server = nullptr;
-WiFiClient ArcticClient::_wifi_client;
+WiFiServer* ArcticClient::_uplink_server = nullptr;
+WiFiServer* ArcticClient::_downlink_server = nullptr;
+WiFiClient ArcticClient::_uplink_client;
+WiFiClient ArcticClient::_downlink_client;
+
+HardwareSerial* ArcticClient::_uart_port = nullptr;
 
 // Constructor for handler
 ArcticClient::ArcticClient(const std::string& bleDeviceName) {
@@ -46,7 +50,6 @@ void ArcticClient::begin(uint8_t interface) {
 			break;
 		case ARCTIC_UART: // UART interface
 			ArcticClient::arctic_interface = ARCTIC_UART;
-			_uart_interface->begin(_bauds);
 			break;
 		case ARCTIC_WIFI: // WiFi interface
 			ArcticClient::arctic_interface = ARCTIC_WIFI;
@@ -56,7 +59,7 @@ void ArcticClient::begin(uint8_t interface) {
 
 // Interface: Set interface
 void ArcticClient::interface(HardwareSerial& uart_interface) {
-	_uart_interface = &uart_interface;
+	_uart_port = &uart_interface;
 }
 
 // Baudrate: Set baudrate
@@ -65,10 +68,11 @@ void ArcticClient::baudrate(uint32_t bauds) {
 }
 
 // Connect: Connect to WiFi
-void ArcticClient::connect(const std::string& ssid, const std::string& password, uint16_t socket_port) {
+void ArcticClient::connect(const std::string& ssid, const std::string& password, uint16_t socket_uplink, uint16_t socket_downlink) {
 	_ssid = ssid;
 	_password = password;
-	_socket_port = socket_port;
+	_socket_port_uplink = socket_uplink;
+	_socket_port_downlink = socket_downlink;
 
 	// Connect to WiFi
 	WiFi.begin(ssid.c_str(), password.c_str());
@@ -76,76 +80,21 @@ void ArcticClient::connect(const std::string& ssid, const std::string& password,
 		delay(100);
 	}
 	IPAddress ip = WiFi.localIP();
-	Serial.println(ip);
-
-	// Start WiFi server
-	_wifi_server = new WiFiServer(_socket_port);
-	xTaskCreatePinnedToCore(arctic_server_task, "ArcticServerTask", 4096, this, 1, NULL, 0);
 }
 
 // Disconnect: Disconnect from WiFi
 void ArcticClient::disconnect() { // TODO: CAUSES CRASH
 	WiFi.disconnect();
-	delete _wifi_server;
-	_wifi_server = nullptr;
+	delete _uplink_server;
+	delete _downlink_server;
+	_uplink_server = nullptr;
+	_downlink_server = nullptr;
 }
 
 // Static wrapper function
-void ArcticClient::arctic_server_task(void *pvParameters) {
-	ArcticClient *instance = static_cast<ArcticClient*>(pvParameters); // Cast to ArcticClient pointer
+void ArcticClient::arctic_server_task(void* pvParameters) {
+	ArcticClient* instance = static_cast<ArcticClient*>(pvParameters); // Cast to ArcticClient pointer
 	instance->server_task(); // Call the actual task method
-}
-
-void ArcticClient::server_task() {
-	_wifi_server->begin();
-	while (1) {
-		WiFiClient client = _wifi_server->available();
-
-		// Update WiFi client
-		if (client) {
-			_wifi_client = client;
-
-			// Read data from client
-			if (_wifi_client.connected()) {
-				while (_wifi_client.available()) {
-					std::string command;
-					while (_wifi_client.available()) {
-						char c = _wifi_client.read();
-						if (c == '\n') break;
-						command += c;
-					}
-
-					// Respond to name and MAC address
-					if (command == "ARCTIC_COMMAND_GET_DEVICE") {
-						std::string response_com = "ARCTIC_COMMAND_GET_DEVICE:";
-                        std::string mac = WiFi.macAddress().c_str();
-                        std::string response = response_com + _bleDeviceName + "," + mac;
-                        _wifi_client.println(response.c_str());
-					}
-
-					// Respond to services available
-					if (command == "ARCTIC_COMMAND_GET_SERVICES") {
-						std::string response_com = "ARCTIC_COMMAND_GET_SERVICES:";
-						std::string response = response_com;
-						for (auto& console : consoles) {
-							response += "," + console.get()._monitorName;
-						}
-						_wifi_client.println(response.c_str());
-					}
-				}
-			}
-		}
-
-		// Update connection status
-		if (_wifi_client.connected()) {
-			ArcticClient::arctic_connection_status = true;
-		}
-		else {
-			ArcticClient::arctic_connection_status = false;
-		}
-
-		vTaskDelay(pdMS_TO_TICKS(10));
-	}
 }
 
 // Add console to global map
@@ -155,11 +104,13 @@ void ArcticClient::add(ArcticTerminal& console) {
 
 // Start: Start BLE server and advertising
 void ArcticClient::start() {
+
+	// Bluetooth
 	if (ArcticClient::arctic_interface == ARCTIC_BLUETOOTH) {
 		// Initialize services and characteristics
 		pAdvertising = NimBLEDevice::getAdvertising();
 
-	#ifdef ARCTIC_ENABLE_DEFAULT_SERVICES
+#ifdef ARCTIC_ENABLE_DEFAULT_SERVICES
 		// Some OS may require this services to be enabled
 
 		// HID Service
@@ -181,7 +132,7 @@ void ArcticClient::start() {
 		pService = pServer->createService(BLEUUID((uint16_t)BLE_UUID_DEVICE_INFORMATION_SERVICE));
 		pService->start();
 		pAdvertising->addServiceUUID(pService->getUUID());
-	#endif
+#endif
 
 		// Create system (background) service
 		createService(pAdvertising);
@@ -200,8 +151,26 @@ void ArcticClient::start() {
 		}
 	}
 
-	// Handle interface for WiFi and UART
-	if (ArcticClient::arctic_interface == ARCTIC_WIFI || ArcticClient::arctic_interface == ARCTIC_UART) {
+	// WiFi
+	if (ArcticClient::arctic_interface == ARCTIC_WIFI) {
+
+		// Start WiFi server
+		_uplink_server = new WiFiServer(_socket_port_uplink);
+		_downlink_server = new WiFiServer(_socket_port_downlink);
+		xTaskCreatePinnedToCore(arctic_server_task, "ArcticServerTask", 4096, this, 1, NULL, 0);
+
+		// Start consoles
+		for (auto& console : consoles) {
+			console.get().start();
+		}
+	}
+
+	// UART
+	if (ArcticClient::arctic_interface == ARCTIC_UART) {
+
+		// Start UART server
+		xTaskCreatePinnedToCore(arctic_server_task, "ArcticServerTask", 4096, this, 1, NULL, 0);
+
 		// Start consoles
 		for (auto& console : consoles) {
 			console.get().start();
@@ -250,5 +219,145 @@ bool ArcticClient::connected() {
 }
 
 void interface(uint8_t interface) {
+}
 
+void ArcticClient::server_task() {
+
+	// Bluetooth
+	if (ArcticClient::arctic_interface == ARCTIC_BLUETOOTH) {
+		// Process is handled by NimBLE
+		while (1) {
+			vTaskDelay(pdMS_TO_TICKS(1000));
+		}
+	}
+
+	// WiFi
+	if (ArcticClient::arctic_interface == ARCTIC_WIFI) {
+		_uplink_server->begin();
+		_downlink_server->begin();
+		while (1) {
+			WiFiClient uplink_client = _uplink_server->available();
+			if (uplink_client) {
+				_uplink_client = uplink_client;
+			}
+
+			// Update WiFi client
+			WiFiClient downlink_client = _downlink_server->available();
+			if (downlink_client) {
+				_downlink_client = downlink_client;
+
+				// Read data from client
+				if (_downlink_client.connected()) {
+					while (_downlink_client.available()) {
+						std::string command;
+						while (_downlink_client.available()) {
+							char c = _downlink_client.read();
+							if (c == '\n') break;
+							command += c;
+						}
+
+						// Respond to name and MAC address
+						if (command == "ARCTIC_COMMAND_GET_DEVICE") {
+							std::string response_com = "ARCTIC_COMMAND_GET_DEVICE:";
+							std::string mac = WiFi.macAddress().c_str();
+							std::string response = response_com + _bleDeviceName + "," + mac;
+							_downlink_client.println(response.c_str());
+						}
+
+						// Respond to services available
+						if (command == "ARCTIC_COMMAND_GET_SERVICES") {
+							std::string response_com = "ARCTIC_COMMAND_GET_SERVICES:";
+							std::string response = response_com;
+							for (auto& console : consoles) {
+								response += console.get().get_name() + "," + console.get().get_uuid_ats() + "," + console.get().get_uuid_txm() + "," + console.get().get_uuid_txs() + "," + console.get().get_uuid_rxm();
+								if (&console != &consoles.back()) response += ":";
+							}
+							_downlink_client.println(response.c_str());
+						}
+
+						// Split UUID from input data (UUID:DATA)
+						if (command.find(":") != std::string::npos) {
+							std::string uuid = command.substr(0, command.find(":"));
+							std::string data = command.substr(command.find(":") + 1);
+							for (auto& console : consoles) {
+								if (console.get().get_uuid_rxm().compare(uuid) == 0) {
+									console.get().setNewDataAvailable(true, data);
+								}
+							}
+						}
+					}
+				}
+			}
+
+			// Update connection status
+			if (_uplink_client.connected()) {
+				ArcticClient::arctic_connection_status = true;
+			}
+			else {
+				ArcticClient::arctic_connection_status = false;
+			}
+
+			vTaskDelay(pdMS_TO_TICKS(10));
+		}
+	}
+
+	// UART
+	if (ArcticClient::arctic_interface == ARCTIC_UART) {
+		_uart_port->begin(_bauds);
+		while (1) {
+			if (_uart_port->available() > 0) {
+
+				// Update connection status
+				_uart_timer = millis();
+
+				// Read data from client
+				std::string command;
+				while (_uart_port->available()) {
+					char c = _uart_port->read();
+					if (c == '\n') break;
+					command += c;
+				}
+
+				// Respond to name and MAC address
+				if (command == "ARCTIC_COMMAND_GET_DEVICE") {
+					std::string response_com = "ARCTIC_COMMAND_GET_DEVICE:";
+					std::string mac = WiFi.macAddress().c_str();
+					std::string response = response_com + _bleDeviceName + "," + mac;
+					_uart_port->println(response.c_str());
+				}
+
+				// Respond to services available
+				if (command == "ARCTIC_COMMAND_GET_SERVICES") {
+					std::string response_com = "ARCTIC_COMMAND_GET_SERVICES:";
+					std::string response = response_com;
+					for (auto& console : consoles) {
+						response += console.get().get_name() + "," + console.get().get_uuid_ats() + "," + console.get().get_uuid_txm() + "," + console.get().get_uuid_txs() + "," + console.get().get_uuid_rxm();
+						if (&console != &consoles.back()) response += ":";
+					}
+					_uart_port->println(response.c_str());
+				}
+
+				// Split UUID from input data (UUID:DATA)
+				if (command.find(":") != std::string::npos) {
+					std::string uuid = command.substr(0, command.find(":"));
+					std::string data = command.substr(command.find(":") + 1);
+					for (auto& console : consoles) {
+						if (console.get().get_uuid_rxm().compare(uuid) == 0) {
+							console.get().setNewDataAvailable(true, data);
+						}
+					}
+				}
+			}
+
+			// Update connection status by timeout
+			if (millis() - _uart_timer > ARCTIC_DEFAULT_UART_TIMEOUT) {
+				ArcticClient::arctic_connection_status = false;
+			}
+			else {
+				ArcticClient::arctic_connection_status = true;
+			}
+			
+			vTaskDelay(pdMS_TO_TICKS(10));
+		}
+	}
 }

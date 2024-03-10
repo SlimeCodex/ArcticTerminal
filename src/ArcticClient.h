@@ -52,10 +52,12 @@
 #define ARCTIC_DEFAULT_DEVICE_NAME "ArcticTerminal"
 
 // Default Port for WiFi
-#define ARCTIC_DEFAULT_PORT 56320
+#define ARCTIC_DEFAULT_PORT_UPLINK 56320
+#define ARCTIC_DEFAULT_PORT_DOWNLINK 56321
 
 // Default Baudrate for UART
-#define ARCTIC_DEFAULT_BAUDS 115200
+#define ARCTIC_DEFAULT_BAUDS 230400
+#define ARCTIC_DEFAULT_UART_TIMEOUT 500
 
 // Some OS may require this services to be enabled
 #ifdef ARCTIC_ENABLE_DEFAULT_SERVICES
@@ -98,7 +100,10 @@ public:
 	void begin(uint8_t interface = ARCTIC_BLUETOOTH);
 	void interface(HardwareSerial& uart_interface);
 	void baudrate(uint32_t bauds = ARCTIC_DEFAULT_BAUDS);
-	void connect(const std::string& ssid, const std::string& password, uint16_t socket_port = ARCTIC_DEFAULT_PORT);
+	void connect(const std::string& ssid, const std::string& password,
+		uint16_t socket_uplink = ARCTIC_DEFAULT_PORT_UPLINK,
+		uint16_t socket_downlink = ARCTIC_DEFAULT_PORT_DOWNLINK
+	);
 	void disconnect();
 	static void arctic_server_task(void* pvParameters);
 	void server_task();
@@ -110,16 +115,18 @@ public:
 	bool connected();
 	static bool arctic_connection_status;
 	static uint8_t arctic_interface;
-	static WiFiServer* _wifi_server;
-	static WiFiClient _wifi_client;
+	static WiFiServer* _uplink_server;
+	static WiFiServer* _downlink_server;
+	static WiFiClient _uplink_client;
+	static WiFiClient _downlink_client;
 	static BLEConnParams arctic_cparams;
+	static HardwareSerial* _uart_port;
 	ArcticOTA ota;
 	NimBLECharacteristic* _txCharacteristic;
 	NimBLECharacteristic* _rxCharacteristic;
 
 private:
 	uint8_t _active_interface;
-	HardwareSerial* _uart_interface;
 	std::string _bleDeviceName;
 	bool _debug_enabled = false;
 	bool _ota_console = false;
@@ -127,7 +134,10 @@ private:
 	NimBLEAdvertising* pAdvertising;
 	std::vector<std::reference_wrapper<ArcticTerminal>> consoles;
 	uint32_t _bauds = ARCTIC_DEFAULT_BAUDS;
-	uint16_t _socket_port = ARCTIC_DEFAULT_PORT;
+	uint16_t _socket_port_uplink;
+	uint16_t _socket_port_downlink;
 	std::string _ssid;
 	std::string _password;
+
+	uint32_t _uart_timer = 0;
 };

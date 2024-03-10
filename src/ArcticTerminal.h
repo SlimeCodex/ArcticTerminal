@@ -48,6 +48,11 @@ public:
 	int createServiceUUID();
 
 	void setNewDataAvailable(bool available, std::string command);
+	std::string get_name();
+	std::string get_uuid_ats();
+	std::string get_uuid_txm();
+	std::string get_uuid_txs();
+	std::string get_uuid_rxm();
 
 private:
 	bool _debug_enabled = false;
@@ -61,9 +66,10 @@ private:
 
 	// Used for WiFi and UART
 	struct ServiceStringUUIDs {
-		std::string txStringUUID;
-		std::string txsStringUUID;
-		std::string rxStringUUID;
+		std::string uuid_ats;
+		std::string uuid_txm;
+		std::string uuid_txs;
+		std::string uuid_rxm;
 	};
 
 	std::string _monitorName;
@@ -77,4 +83,7 @@ private:
 	std::map<int, ServiceCharacteristics> services;
 
 	std::map<int, ServiceStringUUIDs> serialServices;
+
+	std::string _wifi_command;
+	std::string _uart_command;
 };
