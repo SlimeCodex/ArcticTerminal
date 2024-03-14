@@ -35,6 +35,7 @@
 #include <ArcticCommand.h>
 #include <ArcticOTA.h>
 #include <ArcticTerminal.h>
+#include <ArcticPatterns.h>
 
 // Enumeration for connection profiles
 #define ARCTIC_PROFILE_HIGH_SPEED 0x00 // default
@@ -57,7 +58,13 @@
 
 // Default Baudrate for UART
 #define ARCTIC_DEFAULT_BAUDS 230400
-#define ARCTIC_DEFAULT_UART_TIMEOUT 500
+#define ARCTIC_DEFAULT_UART_ACTIVITY_TIMEOUT 500
+#define ARCTIC_DEFAULT_UART_KEEPALIVE_TIMEOUT 400
+
+#define ARCTIC_DEFAULT_PRIMARY_DELIMITER ":"
+#define ARCTIC_DEFAULT_SECONDARY_DELIMITER ","
+
+#define ARCTIC_DEFAULT_KEEPALIVE_SYMBOL "0"
 
 // Some OS may require this services to be enabled
 #ifdef ARCTIC_ENABLE_DEFAULT_SERVICES
@@ -114,6 +121,7 @@ public:
 	void createService(NimBLEAdvertising* existingAdvertising);
 	bool connected();
 	static bool arctic_connection_status;
+	static bool arctic_uplink_enabled;
 	static uint8_t arctic_interface;
 	static WiFiServer* _uplink_server;
 	static WiFiServer* _downlink_server;
@@ -121,6 +129,7 @@ public:
 	static WiFiClient _downlink_client;
 	static BLEConnParams arctic_cparams;
 	static HardwareSerial* _uart_port;
+	static uint32_t _uart_keepalive_timer;
 	ArcticOTA ota;
 	NimBLECharacteristic* _txCharacteristic;
 	NimBLECharacteristic* _rxCharacteristic;
@@ -138,6 +147,7 @@ private:
 	uint16_t _socket_port_downlink;
 	std::string _ssid;
 	std::string _password;
+	bool _uart_ready_notify = false;
 
-	uint32_t _uart_timer = 0;
+	uint32_t _uart_activity_timer = 0;
 };

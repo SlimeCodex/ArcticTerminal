@@ -21,8 +21,10 @@
 
 // Initialize static variables
 bool ArcticClient::arctic_connection_status = false;
+bool ArcticClient::arctic_uplink_enabled = false;
 uint8_t ArcticClient::arctic_interface = ARCTIC_BLUETOOTH;
 BLEConnParams ArcticClient::arctic_cparams = {0, 0, 0, 0};
+uint32_t ArcticClient::_uart_keepalive_timer = 0;
 
 WiFiServer* ArcticClient::_uplink_server = nullptr;
 WiFiServer* ArcticClient::_downlink_server = nullptr;
@@ -57,7 +59,7 @@ void ArcticClient::begin(uint8_t interface) {
 	}
 }
 
-// Interface: Set interface
+// Interface: Set UART interface
 void ArcticClient::interface(HardwareSerial& uart_interface) {
 	_uart_port = &uart_interface;
 }
@@ -206,9 +208,9 @@ void ArcticClient::debug(bool status) {
 
 // Create system service
 void ArcticClient::createService(NimBLEAdvertising* existingAdvertising) {
-	NimBLEService* pService = pServer->createService("4fafc201-1fb5-459e-1000-c5c9c3319f00");
-	_txCharacteristic = pService->createCharacteristic("4fafc201-1fb5-459e-1000-c5c9c3319a00", NIMBLE_PROPERTY::NOTIFY); // TX
-	_rxCharacteristic = pService->createCharacteristic("4fafc201-1fb5-459e-1000-c5c9c3319b00", NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR); // RX
+	NimBLEService* pService = pServer->createService(ARCTIC_UUID_BLE_BACKEND_ATS);
+	_txCharacteristic = pService->createCharacteristic(ARCTIC_UUID_BLE_BACKEND_TX, NIMBLE_PROPERTY::NOTIFY); // TX
+	_rxCharacteristic = pService->createCharacteristic(ARCTIC_UUID_BLE_BACKEND_RX, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR); // RX
 	_rxCharacteristic->setCallbacks(new RxCharacteristicCallbacks(this));
 	pService->start(); // Start the service
 	existingAdvertising->addServiceUUID(pService->getUUID());
@@ -216,9 +218,6 @@ void ArcticClient::createService(NimBLEAdvertising* existingAdvertising) {
 
 bool ArcticClient::connected() {
 	return ArcticClient::arctic_connection_status;
-}
-
-void interface(uint8_t interface) {
 }
 
 void ArcticClient::server_task() {
@@ -308,9 +307,20 @@ void ArcticClient::server_task() {
 			if (_uart_port->available() > 0) {
 
 				// Update connection status
-				_uart_timer = millis();
+				_uart_activity_timer = millis();
+				std::string backend_tx = ARCTIC_UUID_UART_BACKEND_TX;
+				std::string backend_rx = ARCTIC_UUID_UART_BACKEND_RX;
+				std::string delg = ARCTIC_DEFAULT_PRIMARY_DELIMITER;
+				std::string delv = ARCTIC_DEFAULT_SECONDARY_DELIMITER;
 
-				// Read data from client
+				// Send the ready notification
+				if (!_uart_ready_notify) {
+					std::string response = backend_tx + delg + "ARCTIC_COMMAND_INTERFACE_READY";
+					_uart_port->println(response.c_str());
+					_uart_ready_notify = true;
+				}
+
+				// Read incoming downlink
 				std::string command;
 				while (_uart_port->available()) {
 					char c = _uart_port->read();
@@ -318,40 +328,82 @@ void ArcticClient::server_task() {
 					command += c;
 				}
 
-				// Respond to name and MAC address
-				if (command == "ARCTIC_COMMAND_GET_DEVICE") {
-					std::string response_com = "ARCTIC_COMMAND_GET_DEVICE:";
-					std::string mac = WiFi.macAddress().c_str();
-					std::string response = response_com + _bleDeviceName + "," + mac;
-					_uart_port->println(response.c_str());
-				}
+				// Data console distribution: Split UUID from input data (UUID:DATA)
+				if (command.find(ARCTIC_DEFAULT_PRIMARY_DELIMITER) != std::string::npos) {
+					std::string uuid = command.substr(0, command.find(ARCTIC_DEFAULT_PRIMARY_DELIMITER));
+					std::string com = command.substr(command.find(ARCTIC_DEFAULT_PRIMARY_DELIMITER) + 1);
 
-				// Respond to services available
-				if (command == "ARCTIC_COMMAND_GET_SERVICES") {
-					std::string response_com = "ARCTIC_COMMAND_GET_SERVICES:";
-					std::string response = response_com;
-					for (auto& console : consoles) {
-						response += console.get().get_name() + "," + console.get().get_uuid_ats() + "," + console.get().get_uuid_txm() + "," + console.get().get_uuid_txs() + "," + console.get().get_uuid_rxm();
-						if (&console != &consoles.back()) response += ":";
+					// Backend commands
+					if (uuid.compare(backend_rx) == 0) {
+
+						// Respond to name and MAC address
+						if (command == "ARCTIC_COMMAND_GET_DEVICE") {
+							std::string response = backend_tx + delg + com + delg;
+							std::string mac = WiFi.macAddress().c_str();
+							response += _bleDeviceName + delg + mac;
+							_uart_port->println(response.c_str());
+							continue;
+						}
+
+						// Respond to services available
+						if (com == "ARCTIC_COMMAND_GET_SERVICES") {
+							std::string response = backend_tx + delg + com + delg;
+							for (auto& console : consoles) {
+								response += (
+									console.get().get_name() + delv + // Name
+									console.get().get_uuid_ats() + delv + // UUID ATS
+									console.get().get_uuid_txm() + delv + // UUID TXM
+									console.get().get_uuid_txs() + delv + // UUID TXS
+									console.get().get_uuid_rxm() // UUID RXM
+								);
+								if (&console != &consoles.back()) response += delg;
+							}
+							_uart_port->println(response.c_str());
+							continue;
+						}
+
+						// Enable data uplink
+						if (com == "ARCTIC_COMMAND_ENABLE_UPLINK") {
+							std::string response = backend_tx + delg + com + delg;
+							response += "DONE";
+
+							_uart_port->println(response.c_str());
+							ArcticClient::arctic_uplink_enabled = true;
+							continue;
+						}
+
+						// Disable data uplink
+						if (com == "ARCTIC_COMMAND_DISABLE_UPLINK") {
+							std::string response = backend_tx + delg + com + delg;
+							response += "DONE";
+
+							_uart_port->println(response.c_str());
+							ArcticClient::arctic_uplink_enabled = false;
+							continue;
+						}
 					}
-					_uart_port->println(response.c_str());
-				}
 
-				// Split UUID from input data (UUID:DATA)
-				if (command.find(":") != std::string::npos) {
-					std::string uuid = command.substr(0, command.find(":"));
-					std::string data = command.substr(command.find(":") + 1);
+					// Data console distribution
 					for (auto& console : consoles) {
-						if (console.get().get_uuid_rxm().compare(uuid) == 0) {
-							console.get().setNewDataAvailable(true, data);
+						std::string console_uuid = console.get().get_uuid_rxm();
+						if (uuid.compare(console_uuid) == 0) {
+							console.get().setNewDataAvailable(true, com);
+							break;
 						}
 					}
 				}
 			}
 
+			// Send uplink keepalive periodically
+			if (millis() - _uart_keepalive_timer > ARCTIC_DEFAULT_UART_KEEPALIVE_TIMEOUT) {
+				_uart_keepalive_timer = millis();
+				_uart_port->println(ARCTIC_DEFAULT_KEEPALIVE_SYMBOL);
+			}
+
 			// Update connection status by timeout
-			if (millis() - _uart_timer > ARCTIC_DEFAULT_UART_TIMEOUT) {
+			if (millis() - _uart_activity_timer > ARCTIC_DEFAULT_UART_ACTIVITY_TIMEOUT) {
 				ArcticClient::arctic_connection_status = false;
+				_uart_ready_notify = false;
 			}
 			else {
 				ArcticClient::arctic_connection_status = true;

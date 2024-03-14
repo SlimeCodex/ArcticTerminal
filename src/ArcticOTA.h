@@ -26,6 +26,8 @@
 #include <NimBLEDevice.h>
 #include <Update.h>
 
+#include <ArcticPatterns.h>
+
 class ArcticOTA {
 public:
 	ArcticOTA();

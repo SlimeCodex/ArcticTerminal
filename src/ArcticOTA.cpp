@@ -34,9 +34,9 @@ void ArcticOTA::start(NimBLEServer* existingServer, NimBLEAdvertising* existingA
 
 // Create service: Create console with TX, TXS, RX and Name Characteristics
 void ArcticOTA::createService(NimBLEAdvertising* existingAdvertising) {
-	NimBLEService* pService = pServer->createService("4fafc201-1fb5-459e-2000-c5c9c3319f00");
-	_txCharacteristic = pService->createCharacteristic("4fafc201-1fb5-459e-2000-c5c9c3319a00", NIMBLE_PROPERTY::NOTIFY); // TX
-	_rxCharacteristic = pService->createCharacteristic("4fafc201-1fb5-459e-2000-c5c9c3319b00", NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR); // RX
+	NimBLEService* pService = pServer->createService(ARCTIC_UUID_BLE_OTA_ATS);
+	_txCharacteristic = pService->createCharacteristic(ARCTIC_UUID_BLE_OTA_TX, NIMBLE_PROPERTY::NOTIFY); // TX
+	_rxCharacteristic = pService->createCharacteristic(ARCTIC_UUID_BLE_OTA_RX, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR); // RX
 	_rxCharacteristic->setCallbacks(new RxCharacteristicCallbacks(this));
 	pService->start(); // Start the service
 	existingAdvertising->addServiceUUID(pService->getUUID());

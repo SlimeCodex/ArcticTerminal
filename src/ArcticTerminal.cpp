@@ -54,22 +54,22 @@ int ArcticTerminal::createService(NimBLEAdvertising* existingAdvertising) {
 
 		// Create service
 		char serviceUUID[37];
-		snprintf(serviceUUID, sizeof(serviceUUID), "4fafc201-1fb5-459e-3%03x-c5c9c3319f%02x", serviceCount, serviceCount);
+		snprintf(serviceUUID, sizeof(serviceUUID), ARCTIC_UUID_BLE_CONSOLE_ATS, serviceCount, serviceCount);
 		NimBLEService* pService = pServer->createService(serviceUUID);
 
 		// TX
 		char txCharUUID[37];
-		snprintf(txCharUUID, sizeof(txCharUUID), "4fafc201-1fb5-459e-3%03x-c5c9c3319a%02x", serviceCount, serviceCount);
+		snprintf(txCharUUID, sizeof(txCharUUID), ARCTIC_UUID_BLE_CONSOLE_TX, serviceCount, serviceCount);
 		NimBLECharacteristic* txCharacteristic = pService->createCharacteristic(txCharUUID, NIMBLE_PROPERTY::NOTIFY);
 
 		// TX (single)
 		char txsCharUUID[37];
-		snprintf(txsCharUUID, sizeof(txsCharUUID), "4fafc201-1fb5-459e-3%03x-c5c9c3319b%02x", serviceCount, serviceCount);
+		snprintf(txsCharUUID, sizeof(txsCharUUID), ARCTIC_UUID_BLE_CONSOLE_TXS, serviceCount, serviceCount);
 		NimBLECharacteristic* txsCharacteristic = pService->createCharacteristic(txsCharUUID, NIMBLE_PROPERTY::NOTIFY);
 
 		// RX
 		char rxCharUUID[37];
-		snprintf(rxCharUUID, sizeof(rxCharUUID), "4fafc201-1fb5-459e-3%03x-c5c9c3319c%02x", serviceCount, serviceCount);
+		snprintf(rxCharUUID, sizeof(rxCharUUID), ARCTIC_UUID_BLE_CONSOLE_RX, serviceCount, serviceCount);
 		NimBLECharacteristic* rxCharacteristic = pService->createCharacteristic(rxCharUUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
 		rxCharacteristic->setCallbacks(new RxCharacteristicCallbacks(this));
 
@@ -85,24 +85,47 @@ int ArcticTerminal::createService(NimBLEAdvertising* existingAdvertising) {
 }
 
 int ArcticTerminal::createServiceUUID() {
-	// Assign UUIDs for WiFi and UART
-	if (ArcticClient::arctic_interface == ARCTIC_WIFI || ArcticClient::arctic_interface == ARCTIC_UART) {
+	// Assign UUIDs for WiFi
+	if (ArcticClient::arctic_interface == ARCTIC_WIFI) {
 
 		// Service
-		char uuid_service[6];
-		snprintf(uuid_service, sizeof(uuid_service), "ATS%02x", serviceCount);
+		char uuid_service[9];
+		snprintf(uuid_service, sizeof(uuid_service), ARCTIC_UUID_WIFI_CONSOLE_ATS, serviceCount);
 
 		// TX (multiline)
-		char uuid_txm[6];
-		snprintf(uuid_txm, sizeof(uuid_txm), "TXM%02x", serviceCount);
+		char uuid_txm[9];
+		snprintf(uuid_txm, sizeof(uuid_txm), ARCTIC_UUID_WIFI_CONSOLE_TX, serviceCount);
 
 		// TX (single)
-		char uuid_txs[6];
-		snprintf(uuid_txs, sizeof(uuid_txs), "TXS%02x", serviceCount);
+		char uuid_txs[9];
+		snprintf(uuid_txs, sizeof(uuid_txs), ARCTIC_UUID_WIFI_CONSOLE_TXS, serviceCount);
 
 		// RX
-		char uuid_rxm[6];
-		snprintf(uuid_rxm, sizeof(uuid_rxm), "RXM%02x", serviceCount);
+		char uuid_rxm[9];
+		snprintf(uuid_rxm, sizeof(uuid_rxm), ARCTIC_UUID_WIFI_CONSOLE_RX, serviceCount);
+
+		serialServices[serviceCount] = ServiceStringUUIDs{uuid_service, uuid_txm, uuid_txs, uuid_rxm};
+		return serviceCount++;
+	}
+
+	// Assign UUIDs for UART
+	if (ArcticClient::arctic_interface == ARCTIC_UART) {
+
+		// Service
+		char uuid_service[9];
+		snprintf(uuid_service, sizeof(uuid_service), ARCTIC_UUID_UART_CONSOLE_ATS, serviceCount);
+
+		// TX (multiline)
+		char uuid_txm[9];
+		snprintf(uuid_txm, sizeof(uuid_txm), ARCTIC_UUID_UART_CONSOLE_TX, serviceCount);
+
+		// TX (single)
+		char uuid_txs[9];
+		snprintf(uuid_txs, sizeof(uuid_txs), ARCTIC_UUID_UART_CONSOLE_TXS, serviceCount);
+
+		// RX
+		char uuid_rxm[9];
+		snprintf(uuid_rxm, sizeof(uuid_rxm), ARCTIC_UUID_UART_CONSOLE_RX, serviceCount);
 
 		serialServices[serviceCount] = ServiceStringUUIDs{uuid_service, uuid_txm, uuid_txs, uuid_rxm};
 		return serviceCount++;
@@ -113,6 +136,7 @@ int ArcticTerminal::createServiceUUID() {
 // Printf TX: Multiline TX with format
 void ArcticTerminal::printf(const char* format, ...) {
 	if (!ArcticClient::arctic_connection_status) return;
+	if (!ArcticClient::arctic_uplink_enabled) return;
 	if (serviceID == -1) {
 		return;
 	}
@@ -144,7 +168,6 @@ void ArcticTerminal::printf(const char* format, ...) {
 			std::string txString = servicePair->second.uuid_txm;
 			txString += ":";
 			txString += buffer;
-			txString += "\n";
 
 			ArcticClient::_uplink_client.print(txString.c_str());
 		}
@@ -152,13 +175,17 @@ void ArcticTerminal::printf(const char* format, ...) {
 
 	// UART
 	if (ArcticClient::arctic_interface == ARCTIC_UART) {
+
+		// Refresh keepalive timer
+		ArcticClient::_uart_keepalive_timer = millis();
+
+		// Send data
 		auto servicePair = serialServices.find(serviceID);
 		if (servicePair != serialServices.end()) {
 			// concatenate the serial string with the buffer
 			std::string txString = servicePair->second.uuid_txm;
 			txString += ":";
 			txString += buffer;
-			txString += "\n";
 
 			ArcticClient::_uart_port->print(txString.c_str());
 		}
@@ -170,6 +197,7 @@ void ArcticTerminal::printf(const char* format, ...) {
 // Singlef TX: Single line TX with format
 void ArcticTerminal::singlef(const char* format, ...) {
 	if (!ArcticClient::arctic_connection_status) return;
+	if (!ArcticClient::arctic_uplink_enabled) return;
 	if (serviceID == -1) {
 		return;
 	}
@@ -201,24 +229,27 @@ void ArcticTerminal::singlef(const char* format, ...) {
 				std::string txString = servicePair->second.uuid_txs;
 				txString += ":";
 				txString += buffer;
-				txString += "\n";
 
-				ArcticClient::_uplink_client.print(txString.c_str());
+				ArcticClient::_uplink_client.println(txString.c_str());
 			}
 		}
 	}
 
 	// UART
 	if (ArcticClient::arctic_interface == ARCTIC_UART) {
+
+		// Refresh keepalive timer
+		ArcticClient::_uart_keepalive_timer = millis();
+
+		// Send data
 		auto servicePair = serialServices.find(serviceID);
 		if (servicePair != serialServices.end()) {
 			// concatenate the serial string with the buffer
 			std::string txString = servicePair->second.uuid_txs;
 			txString += ":";
 			txString += buffer;
-			txString += "\n";
 
-			ArcticClient::_uart_port->print(txString.c_str());
+			ArcticClient::_uart_port->println(txString.c_str());
 		}
 	}
 
@@ -255,9 +286,13 @@ void ArcticTerminal::setNewDataAvailable(bool available, std::string command) {
 // Available RX: Check if new data is available
 bool ArcticTerminal::available() {
 	if (!ArcticClient::arctic_connection_status) return false;
-	bool available = newDataAvailable.load();
-	newDataAvailable = false;
-	return available;
+
+	newDataAvailable.load();
+	if (newDataAvailable) {
+		newDataAvailable = false;
+		return true;
+	}
+	return false;
 }
 
 // Read RX: Read RX data until delimiter
@@ -290,12 +325,7 @@ std::string ArcticTerminal::read(char delimiter) {
 	// UART
 	if (ArcticClient::arctic_interface == ARCTIC_UART) {
 		std::string command = _uart_command;
-		size_t pos = command.find(delimiter);
-		if (pos != std::string::npos) {
-			std::string data = command.substr(0, pos);
-			_uart_command = command.substr(pos + 1);
-			return data;
-		}
+		return command;
 	}
 	return std::string();
 }

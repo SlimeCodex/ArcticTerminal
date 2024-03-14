@@ -29,6 +29,7 @@
 #include <NimBLEDevice.h>
 
 #include <ArcticOTA.h>
+#include <ArcticPatterns.h>
 
 class ArcticTerminal {
 public:
