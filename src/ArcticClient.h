@@ -130,6 +130,8 @@ public:
 	static BLEConnParams arctic_cparams;
 	static HardwareSerial* _uart_port;
 	static uint32_t _uart_keepalive_timer;
+	static uint32_t _wifi_keepalive_timer;
+
 	ArcticOTA ota;
 	NimBLECharacteristic* _txCharacteristic;
 	NimBLECharacteristic* _rxCharacteristic;
@@ -148,6 +150,7 @@ private:
 	std::string _ssid;
 	std::string _password;
 	bool _uart_ready_notify = false;
+	bool _wifi_ready_notify = false;
 
 	uint32_t _uart_activity_timer = 0;
 };

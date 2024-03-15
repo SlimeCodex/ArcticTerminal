@@ -25,6 +25,7 @@ bool ArcticClient::arctic_uplink_enabled = false;
 uint8_t ArcticClient::arctic_interface = ARCTIC_BLUETOOTH;
 BLEConnParams ArcticClient::arctic_cparams = {0, 0, 0, 0};
 uint32_t ArcticClient::_uart_keepalive_timer = 0;
+uint32_t ArcticClient::_wifi_keepalive_timer = 0;
 
 WiFiServer* ArcticClient::_uplink_server = nullptr;
 WiFiServer* ArcticClient::_downlink_server = nullptr;
@@ -234,6 +235,12 @@ void ArcticClient::server_task() {
 	if (ArcticClient::arctic_interface == ARCTIC_WIFI) {
 		_uplink_server->begin();
 		_downlink_server->begin();
+						
+		std::string backend_tx = ARCTIC_UUID_WIFI_BACKEND_TX;
+		std::string backend_rx = ARCTIC_UUID_WIFI_BACKEND_RX;
+		std::string delg = ARCTIC_DEFAULT_PRIMARY_DELIMITER;
+		std::string delv = ARCTIC_DEFAULT_SECONDARY_DELIMITER;
+		
 		while (1) {
 			WiFiClient uplink_client = _uplink_server->available();
 			if (uplink_client) {
@@ -248,6 +255,7 @@ void ArcticClient::server_task() {
 				// Read data from client
 				if (_downlink_client.connected()) {
 					while (_downlink_client.available()) {
+
 						std::string command;
 						while (_downlink_client.available()) {
 							char c = _downlink_client.read();
@@ -255,32 +263,69 @@ void ArcticClient::server_task() {
 							command += c;
 						}
 
-						// Respond to name and MAC address
-						if (command == "ARCTIC_COMMAND_GET_DEVICE") {
-							std::string response_com = "ARCTIC_COMMAND_GET_DEVICE:";
-							std::string mac = WiFi.macAddress().c_str();
-							std::string response = response_com + _bleDeviceName + "," + mac;
-							_downlink_client.println(response.c_str());
-						}
+						// Data console distribution: Split UUID from input data (UUID:DATA)
+						if (command.find(ARCTIC_DEFAULT_PRIMARY_DELIMITER) != std::string::npos) {
+							std::string uuid = command.substr(0, command.find(ARCTIC_DEFAULT_PRIMARY_DELIMITER));
+							std::string com = command.substr(command.find(ARCTIC_DEFAULT_PRIMARY_DELIMITER) + 1);
 
-						// Respond to services available
-						if (command == "ARCTIC_COMMAND_GET_SERVICES") {
-							std::string response_com = "ARCTIC_COMMAND_GET_SERVICES:";
-							std::string response = response_com;
-							for (auto& console : consoles) {
-								response += console.get().get_name() + "," + console.get().get_uuid_ats() + "," + console.get().get_uuid_txm() + "," + console.get().get_uuid_txs() + "," + console.get().get_uuid_rxm();
-								if (&console != &consoles.back()) response += ":";
+							// Backend commands
+							if (uuid.compare(backend_rx) == 0) {
+
+								// Respond to name and MAC address
+								if (com == "ARCTIC_COMMAND_GET_DEVICE") {
+									std::string response = backend_tx + delg + com + delg;
+									std::string mac = WiFi.macAddress().c_str();
+									response += _bleDeviceName + delv + mac;
+
+									// Scan is replied from the same port
+									_downlink_client.println(response.c_str());
+									continue;
+								}
+
+								// Respond to services available
+								if (com == "ARCTIC_COMMAND_GET_SERVICES") {
+									std::string response = backend_tx + delg + com + delg;
+									for (auto& console : consoles) {
+										response += (
+											console.get().get_name() + delv + // Name
+											console.get().get_uuid_ats() + delv + // UUID ATS
+											console.get().get_uuid_txm() + delv + // UUID TXM
+											console.get().get_uuid_txs() + delv + // UUID TXS
+											console.get().get_uuid_rxm() // UUID RXM
+										);
+										if (&console != &consoles.back()) response += delg;
+									}
+									_uplink_client.println(response.c_str());
+									continue;
+								}
+
+								// Enable data uplink
+								if (com == "ARCTIC_COMMAND_ENABLE_UPLINK") {
+									std::string response = backend_tx + delg + com + delg;
+									response += "DONE";
+
+									_uplink_client.println(response.c_str());
+									ArcticClient::arctic_uplink_enabled = true;
+									continue;
+								}
+
+								// Disable data uplink
+								if (com == "ARCTIC_COMMAND_DISABLE_UPLINK") {
+									std::string response = backend_tx + delg + com + delg;
+									response += "DONE";
+
+									_uplink_client.println(response.c_str());
+									ArcticClient::arctic_uplink_enabled = false;
+									continue;
+								}
 							}
-							_downlink_client.println(response.c_str());
-						}
 
-						// Split UUID from input data (UUID:DATA)
-						if (command.find(":") != std::string::npos) {
-							std::string uuid = command.substr(0, command.find(":"));
-							std::string data = command.substr(command.find(":") + 1);
+							// Data console distribution
 							for (auto& console : consoles) {
-								if (console.get().get_uuid_rxm().compare(uuid) == 0) {
-									console.get().setNewDataAvailable(true, data);
+								std::string console_uuid = console.get().get_uuid_rxm();
+								if (uuid.compare(console_uuid) == 0) {
+									console.get().setNewDataAvailable(true, com);
+									break;
 								}
 							}
 						}
@@ -291,9 +336,24 @@ void ArcticClient::server_task() {
 			// Update connection status
 			if (_uplink_client.connected()) {
 				ArcticClient::arctic_connection_status = true;
+
+				// Send uplink keepalive periodically
+				if (millis() - _wifi_keepalive_timer > ARCTIC_DEFAULT_UART_KEEPALIVE_TIMEOUT) {
+					_wifi_keepalive_timer = millis();
+					_uplink_client.println(ARCTIC_DEFAULT_KEEPALIVE_SYMBOL);
+				}
+
+				// Send the ready notification
+				if (!_wifi_ready_notify) {
+					std::string response = backend_tx + delg + "ARCTIC_COMMAND_INTERFACE_READY";
+					_uplink_client.println(response.c_str());
+					_wifi_ready_notify = true;
+				}
 			}
 			else {
 				ArcticClient::arctic_connection_status = false;
+				ArcticClient::arctic_uplink_enabled = false;
+				_wifi_ready_notify = false;
 			}
 
 			vTaskDelay(pdMS_TO_TICKS(10));
@@ -337,7 +397,7 @@ void ArcticClient::server_task() {
 					if (uuid.compare(backend_rx) == 0) {
 
 						// Respond to name and MAC address
-						if (command == "ARCTIC_COMMAND_GET_DEVICE") {
+						if (com == "ARCTIC_COMMAND_GET_DEVICE") {
 							std::string response = backend_tx + delg + com + delg;
 							std::string mac = WiFi.macAddress().c_str();
 							response += _bleDeviceName + delg + mac;

@@ -222,6 +222,10 @@ void ArcticTerminal::singlef(const char* format, ...) {
 
 	// WiFi
 	if (ArcticClient::arctic_interface == ARCTIC_WIFI) {
+
+		// Refresh keepalive timer
+		ArcticClient::_wifi_keepalive_timer = millis();
+
 		if (ArcticClient::_uplink_client && ArcticClient::_uplink_client.connected()) {
 			auto servicePair = serialServices.find(serviceID);
 			if (servicePair != serialServices.end()) {
@@ -230,7 +234,7 @@ void ArcticTerminal::singlef(const char* format, ...) {
 				txString += ":";
 				txString += buffer;
 
-				ArcticClient::_uplink_client.println(txString.c_str());
+				ArcticClient::_uplink_client.print(txString.c_str());
 			}
 		}
 	}
@@ -249,7 +253,7 @@ void ArcticTerminal::singlef(const char* format, ...) {
 			txString += ":";
 			txString += buffer;
 
-			ArcticClient::_uart_port->println(txString.c_str());
+			ArcticClient::_uart_port->print(txString.c_str());
 		}
 	}
 
