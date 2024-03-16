@@ -136,6 +136,8 @@ public:
 	NimBLECharacteristic* _txCharacteristic;
 	NimBLECharacteristic* _rxCharacteristic;
 
+	void setNewDataAvailable(bool available, std::string command);
+
 private:
 	uint8_t _active_interface;
 	std::string _bleDeviceName;

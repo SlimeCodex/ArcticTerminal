@@ -221,6 +221,49 @@ bool ArcticClient::connected() {
 	return ArcticClient::arctic_connection_status;
 }
 
+// Process incoming data for backend commands
+void ArcticClient::setNewDataAvailable(bool available, std::string command) {
+
+	// Bluetooth
+	if (ArcticClient::arctic_interface == ARCTIC_BLUETOOTH) {
+		std::string delg = ARCTIC_DEFAULT_PRIMARY_DELIMITER;
+		std::string delv = ARCTIC_DEFAULT_SECONDARY_DELIMITER;
+
+		// Respond to services available
+		if (command == "ARCTIC_COMMAND_GET_SERVICES_NAME") {
+			std::string response = command + delg;
+			for (auto& console : consoles) {
+				response += console.get().get_name();
+				if (&console != &consoles.back()) response += delv;
+			}
+			_txCharacteristic->setValue(response);
+			_txCharacteristic->notify();
+		}
+
+		// Enable data uplink
+		if (command == "ARCTIC_COMMAND_ENABLE_UPLINK") {
+			std::string response = command + delg;
+			response += "DONE";
+
+			_txCharacteristic->setValue(response);
+			_txCharacteristic->notify();
+
+			ArcticClient::arctic_uplink_enabled = true;
+		}
+
+		// Disable data uplink
+		if (command == "ARCTIC_COMMAND_DISABLE_UPLINK") {
+			std::string response = command + delg;
+			response += "DONE";
+
+			_txCharacteristic->setValue(response);
+			_txCharacteristic->notify();
+
+			ArcticClient::arctic_uplink_enabled = false;
+		}
+	}
+}
+
 void ArcticClient::server_task() {
 
 	// Bluetooth
@@ -235,12 +278,12 @@ void ArcticClient::server_task() {
 	if (ArcticClient::arctic_interface == ARCTIC_WIFI) {
 		_uplink_server->begin();
 		_downlink_server->begin();
-						
+
 		std::string backend_tx = ARCTIC_UUID_WIFI_BACKEND_TX;
 		std::string backend_rx = ARCTIC_UUID_WIFI_BACKEND_RX;
 		std::string delg = ARCTIC_DEFAULT_PRIMARY_DELIMITER;
 		std::string delv = ARCTIC_DEFAULT_SECONDARY_DELIMITER;
-		
+
 		while (1) {
 			WiFiClient uplink_client = _uplink_server->available();
 			if (uplink_client) {
@@ -286,12 +329,11 @@ void ArcticClient::server_task() {
 								if (com == "ARCTIC_COMMAND_GET_SERVICES") {
 									std::string response = backend_tx + delg + com + delg;
 									for (auto& console : consoles) {
-										response += (
-											console.get().get_name() + delv + // Name
-											console.get().get_uuid_ats() + delv + // UUID ATS
-											console.get().get_uuid_txm() + delv + // UUID TXM
-											console.get().get_uuid_txs() + delv + // UUID TXS
-											console.get().get_uuid_rxm() // UUID RXM
+										response += (console.get().get_name() + delv + // Name
+													 console.get().get_uuid_ats() + delv + // UUID ATS
+													 console.get().get_uuid_txm() + delv + // UUID TXM
+													 console.get().get_uuid_txs() + delv + // UUID TXS
+													 console.get().get_uuid_rxm() // UUID RXM
 										);
 										if (&console != &consoles.back()) response += delg;
 									}
@@ -409,12 +451,11 @@ void ArcticClient::server_task() {
 						if (com == "ARCTIC_COMMAND_GET_SERVICES") {
 							std::string response = backend_tx + delg + com + delg;
 							for (auto& console : consoles) {
-								response += (
-									console.get().get_name() + delv + // Name
-									console.get().get_uuid_ats() + delv + // UUID ATS
-									console.get().get_uuid_txm() + delv + // UUID TXM
-									console.get().get_uuid_txs() + delv + // UUID TXS
-									console.get().get_uuid_rxm() // UUID RXM
+								response += (console.get().get_name() + delv + // Name
+											 console.get().get_uuid_ats() + delv + // UUID ATS
+											 console.get().get_uuid_txm() + delv + // UUID TXM
+											 console.get().get_uuid_txs() + delv + // UUID TXS
+											 console.get().get_uuid_rxm() // UUID RXM
 								);
 								if (&console != &consoles.back()) response += delg;
 							}
@@ -468,7 +509,7 @@ void ArcticClient::server_task() {
 			else {
 				ArcticClient::arctic_connection_status = true;
 			}
-			
+
 			vTaskDelay(pdMS_TO_TICKS(10));
 		}
 	}

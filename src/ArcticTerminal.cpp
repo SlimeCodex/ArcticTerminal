@@ -262,13 +262,6 @@ void ArcticTerminal::singlef(const char* format, ...) {
 
 // Updates new data flag
 void ArcticTerminal::setNewDataAvailable(bool available, std::string command) {
-	// Process backend commands for console
-	ArcticCommand com = ArcticCommand(command);
-	if (com.base() == "ARCTIC_COMMAND_GET_NAME") {
-		singlef("ARCTIC_COMMAND_REQ_NAME:%s", _monitorName.c_str());
-		newDataAvailable = false;
-		return;
-	}
 
 	// Bluetooth
 	if (ArcticClient::arctic_interface == ARCTIC_BLUETOOTH) {
@@ -310,12 +303,7 @@ std::string ArcticTerminal::read(char delimiter) {
 			NimBLECharacteristic* rxCharacteristic = servicePair->second.rxCharacteristic;
 			if (rxCharacteristic) {
 				std::string value = rxCharacteristic->getValue();
-				size_t pos = value.find(delimiter);
-				if (pos != std::string::npos) {
-					std::string data = value.substr(0, pos);
-					rxCharacteristic->setValue(value.substr(pos + 1));
-					return data;
-				}
+				return value;
 			}
 		}
 	}
