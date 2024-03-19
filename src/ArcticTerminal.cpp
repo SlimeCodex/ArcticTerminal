@@ -234,7 +234,7 @@ void ArcticTerminal::singlef(const char* format, ...) {
 				txString += ":";
 				txString += buffer;
 
-				ArcticClient::_uplink_client.print(txString.c_str());
+				ArcticClient::_uplink_client.println(txString.c_str());
 			}
 		}
 	}
@@ -253,7 +253,7 @@ void ArcticTerminal::singlef(const char* format, ...) {
 			txString += ":";
 			txString += buffer;
 
-			ArcticClient::_uart_port->print(txString.c_str());
+			ArcticClient::_uart_port->println(txString.c_str());
 		}
 	}
 
