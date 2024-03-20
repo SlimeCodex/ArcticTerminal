@@ -166,6 +166,7 @@ void ArcticClient::start() {
 		for (auto& console : consoles) {
 			console.get().start();
 		}
+		ota.start();
 	}
 
 	// UART
@@ -178,6 +179,7 @@ void ArcticClient::start() {
 		for (auto& console : consoles) {
 			console.get().start();
 		}
+		ota.start();
 	}
 }
 
@@ -279,8 +281,13 @@ void ArcticClient::server_task() {
 		_uplink_server->begin();
 		_downlink_server->begin();
 
+		_uplink_server->setNoDelay(true);
+		_downlink_server->setNoDelay(true);
+
 		std::string backend_tx = ARCTIC_UUID_WIFI_BACKEND_TX;
 		std::string backend_rx = ARCTIC_UUID_WIFI_BACKEND_RX;
+		std::string backend_ota_tx = ARCTIC_UUID_WIFI_OTA_TX;
+		std::string backend_ota_rx = ARCTIC_UUID_WIFI_OTA_RX;
 		std::string delg = ARCTIC_DEFAULT_PRIMARY_DELIMITER;
 		std::string delv = ARCTIC_DEFAULT_SECONDARY_DELIMITER;
 
@@ -310,6 +317,12 @@ void ArcticClient::server_task() {
 						if (command.find(ARCTIC_DEFAULT_PRIMARY_DELIMITER) != std::string::npos) {
 							std::string uuid = command.substr(0, command.find(ARCTIC_DEFAULT_PRIMARY_DELIMITER));
 							std::string com = command.substr(command.find(ARCTIC_DEFAULT_PRIMARY_DELIMITER) + 1);
+
+							// OTA has priority
+							if (uuid.compare(backend_ota_rx) == 0) {
+								ota.setNewDataAvailable(true, com);
+								continue;
+							}
 
 							// Backend commands
 							if (uuid.compare(backend_rx) == 0) {
@@ -362,7 +375,7 @@ void ArcticClient::server_task() {
 								}
 							}
 
-							// Data console distribution
+							// Data console distribution for consoles
 							for (auto& console : consoles) {
 								std::string console_uuid = console.get().get_uuid_rxm();
 								if (uuid.compare(console_uuid) == 0) {
@@ -412,6 +425,8 @@ void ArcticClient::server_task() {
 				_uart_activity_timer = millis();
 				std::string backend_tx = ARCTIC_UUID_UART_BACKEND_TX;
 				std::string backend_rx = ARCTIC_UUID_UART_BACKEND_RX;
+				std::string backend_ota_tx = ARCTIC_UUID_UART_OTA_TX;
+				std::string backend_ota_rx = ARCTIC_UUID_UART_OTA_RX;
 				std::string delg = ARCTIC_DEFAULT_PRIMARY_DELIMITER;
 				std::string delv = ARCTIC_DEFAULT_SECONDARY_DELIMITER;
 
@@ -434,6 +449,12 @@ void ArcticClient::server_task() {
 				if (command.find(ARCTIC_DEFAULT_PRIMARY_DELIMITER) != std::string::npos) {
 					std::string uuid = command.substr(0, command.find(ARCTIC_DEFAULT_PRIMARY_DELIMITER));
 					std::string com = command.substr(command.find(ARCTIC_DEFAULT_PRIMARY_DELIMITER) + 1);
+
+					// OTA has priority
+					if (uuid.compare(backend_ota_rx) == 0) {
+						ota.setNewDataAvailable(true, com);
+						continue;
+					}
 
 					// Backend commands
 					if (uuid.compare(backend_rx) == 0) {
