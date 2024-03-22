@@ -170,6 +170,7 @@ void ArcticTerminal::printf(const char* format, ...) {
 			txString += buffer;
 
 			ArcticClient::_uplink_client.print(txString.c_str());
+			ArcticClient::_uplink_client.print(ARCTIC_DEFAULT_SCAPE_SEQUENCE);
 		}
 	}
 
@@ -188,6 +189,7 @@ void ArcticTerminal::printf(const char* format, ...) {
 			txString += buffer;
 
 			ArcticClient::_uart_port->print(txString.c_str());
+			ArcticClient::_uart_port->print(ARCTIC_DEFAULT_SCAPE_SEQUENCE);
 		}
 	}
 
@@ -234,7 +236,9 @@ void ArcticTerminal::singlef(const char* format, ...) {
 				txString += ":";
 				txString += buffer;
 
-				ArcticClient::_uplink_client.println(txString.c_str());
+				ArcticClient::_uplink_client.print(txString.c_str());
+				ArcticClient::_uplink_client.print(ARCTIC_DEFAULT_SCAPE_SEQUENCE);
+				ArcticClient::_uplink_client.println();
 			}
 		}
 	}
@@ -253,7 +257,9 @@ void ArcticTerminal::singlef(const char* format, ...) {
 			txString += ":";
 			txString += buffer;
 
-			ArcticClient::_uart_port->println(txString.c_str());
+			ArcticClient::_uart_port->print(txString.c_str());
+			ArcticClient::_uart_port->print(ARCTIC_DEFAULT_SCAPE_SEQUENCE);
+			ArcticClient::_uart_port->println();
 		}
 	}
 

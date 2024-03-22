@@ -350,7 +350,8 @@ void ArcticClient::server_task() {
 										);
 										if (&console != &consoles.back()) response += delg;
 									}
-									_uplink_client.println(response.c_str());
+									_uplink_client.print(response.c_str());
+									_uplink_client.print(ARCTIC_DEFAULT_SCAPE_SEQUENCE);
 									continue;
 								}
 
@@ -359,7 +360,8 @@ void ArcticClient::server_task() {
 									std::string response = backend_tx + delg + com + delg;
 									response += "DONE";
 
-									_uplink_client.println(response.c_str());
+									_uplink_client.print(response.c_str());
+									_uplink_client.print(ARCTIC_DEFAULT_SCAPE_SEQUENCE);
 									ArcticClient::arctic_uplink_enabled = true;
 									continue;
 								}
@@ -369,7 +371,8 @@ void ArcticClient::server_task() {
 									std::string response = backend_tx + delg + com + delg;
 									response += "DONE";
 
-									_uplink_client.println(response.c_str());
+									_uplink_client.print(response.c_str());
+									_uplink_client.print(ARCTIC_DEFAULT_SCAPE_SEQUENCE);
 									ArcticClient::arctic_uplink_enabled = false;
 									continue;
 								}
@@ -395,13 +398,14 @@ void ArcticClient::server_task() {
 				// Send uplink keepalive periodically
 				if (millis() - _wifi_keepalive_timer > ARCTIC_DEFAULT_UART_KEEPALIVE_TIMEOUT) {
 					_wifi_keepalive_timer = millis();
-					_uplink_client.println(ARCTIC_DEFAULT_KEEPALIVE_SYMBOL);
+					_uplink_client.println(ARCTIC_DEFAULT_KEEPALIVE_SEQUENCE);
 				}
 
 				// Send the ready notification
 				if (!_wifi_ready_notify) {
 					std::string response = backend_tx + delg + "ARCTIC_COMMAND_INTERFACE_READY";
-					_uplink_client.println(response.c_str());
+					_uplink_client.print(response.c_str());
+					_uplink_client.print(ARCTIC_DEFAULT_SCAPE_SEQUENCE);
 					_wifi_ready_notify = true;
 				}
 			}
@@ -433,7 +437,8 @@ void ArcticClient::server_task() {
 				// Send the ready notification
 				if (!_uart_ready_notify) {
 					std::string response = backend_tx + delg + "ARCTIC_COMMAND_INTERFACE_READY";
-					_uart_port->println(response.c_str());
+					_uart_port->print(response.c_str());
+					_uart_port->print(ARCTIC_DEFAULT_SCAPE_SEQUENCE);
 					_uart_ready_notify = true;
 				}
 
@@ -464,7 +469,8 @@ void ArcticClient::server_task() {
 							std::string response = backend_tx + delg + com + delg;
 							std::string mac = WiFi.macAddress().c_str();
 							response += _bleDeviceName + delg + mac;
-							_uart_port->println(response.c_str());
+							_uart_port->print(response.c_str());
+							_uart_port->print(ARCTIC_DEFAULT_SCAPE_SEQUENCE);
 							continue;
 						}
 
@@ -480,7 +486,8 @@ void ArcticClient::server_task() {
 								);
 								if (&console != &consoles.back()) response += delg;
 							}
-							_uart_port->println(response.c_str());
+							_uart_port->print(response.c_str());
+							_uart_port->print(ARCTIC_DEFAULT_SCAPE_SEQUENCE);
 							continue;
 						}
 
@@ -489,7 +496,8 @@ void ArcticClient::server_task() {
 							std::string response = backend_tx + delg + com + delg;
 							response += "DONE";
 
-							_uart_port->println(response.c_str());
+							_uart_port->print(response.c_str());
+							_uart_port->print(ARCTIC_DEFAULT_SCAPE_SEQUENCE);
 							ArcticClient::arctic_uplink_enabled = true;
 							continue;
 						}
@@ -499,7 +507,8 @@ void ArcticClient::server_task() {
 							std::string response = backend_tx + delg + com + delg;
 							response += "DONE";
 
-							_uart_port->println(response.c_str());
+							_uart_port->print(response.c_str());
+							_uart_port->print(ARCTIC_DEFAULT_SCAPE_SEQUENCE);
 							ArcticClient::arctic_uplink_enabled = false;
 							continue;
 						}
@@ -519,7 +528,7 @@ void ArcticClient::server_task() {
 			// Send uplink keepalive periodically
 			if (millis() - _uart_keepalive_timer > ARCTIC_DEFAULT_UART_KEEPALIVE_TIMEOUT) {
 				_uart_keepalive_timer = millis();
-				_uart_port->println(ARCTIC_DEFAULT_KEEPALIVE_SYMBOL);
+				_uart_port->println(ARCTIC_DEFAULT_KEEPALIVE_SEQUENCE);
 			}
 
 			// Update connection status by timeout
