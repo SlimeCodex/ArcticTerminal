@@ -29,14 +29,12 @@
 #include <NimBLEDevice.h>
 
 #include <ArcticOTA.h>
-#include <ArcticPatterns.h>
 
 class ArcticTerminal {
 public:
 	ArcticTerminal(const std::string& monitorName);
 
 	void start(NimBLEServer* existingServer, NimBLEAdvertising* existingAdvertising);
-	void start();
 	void printf(const char* format, ...);
 	void singlef(const char* format, ...);
 	bool available();
@@ -46,31 +44,15 @@ public:
 	std::vector<uint8_t> raw();
 
 	int createService(NimBLEAdvertising* existingAdvertising);
-	int createServiceUUID();
-
 	void setNewDataAvailable(bool available, std::string command);
-	std::string get_name();
-	std::string get_uuid_ats();
-	std::string get_uuid_txm();
-	std::string get_uuid_txs();
-	std::string get_uuid_rxm();
 
 private:
 	bool _debug_enabled = false;
 
-	// Used for Bluetooth
 	struct ServiceCharacteristics {
 		NimBLECharacteristic* txCharacteristic;
 		NimBLECharacteristic* txsCharacteristic;
 		NimBLECharacteristic* rxCharacteristic;
-	};
-
-	// Used for WiFi and UART
-	struct ServiceStringUUIDs {
-		std::string uuid_ats;
-		std::string uuid_txm;
-		std::string uuid_txs;
-		std::string uuid_rxm;
 	};
 
 	std::string _monitorName;
@@ -82,9 +64,4 @@ private:
 
 	std::atomic<bool> newDataAvailable{false};
 	std::map<int, ServiceCharacteristics> services;
-
-	std::map<int, ServiceStringUUIDs> serialServices;
-
-	std::string _wifi_command;
-	std::string _uart_command;
 };

@@ -77,7 +77,6 @@ public:
 			ota_instance->setNewDataAvailable(true, pCharacteristic->getValue());
 		}
 		if (handler_instance) {
-			handler_instance->setNewDataAvailable(true, pCharacteristic->getValue());
 		}
 	}
 };

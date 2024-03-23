@@ -26,23 +26,19 @@
 #include <NimBLEDevice.h>
 #include <Update.h>
 
-#include <ArcticPatterns.h>
-
 class ArcticOTA {
 public:
 	ArcticOTA();
 	void start(NimBLEServer* existingServer, NimBLEAdvertising* existingAdvertising);
-	void start();
-
 	bool available();
 	bool download();
 	void hide();
 	void show();
 	void send(const char* format, ...);
+	std::string read(char delimiter = '\n');
 	std::vector<uint8_t> raw();
 
 	void createService(NimBLEAdvertising* existingAdvertising);
-	
 	void setNewDataAvailable(bool available, std::string command);
 	NimBLECharacteristic* _txCharacteristic;
 	NimBLECharacteristic* _rxCharacteristic;
@@ -53,11 +49,6 @@ private:
 
 	bool _debug_enabled = false;
 	std::atomic<bool> newDataAvailable{false};
-
-	// Used for WiFi and UART
-	std::string uuid_ats;
-	std::string uuid_txm;
-	std::string uuid_rxm;
 
 	// OTA variables
 	bool _ota_started = false;
@@ -74,9 +65,4 @@ private:
 	void ota_handle_error();
 	void ota_send_ack(const char* ack);
 	void ota_clear();
-
-	std::string _wifi_command;
-	std::string _uart_command;
-	std::vector<uint8_t> _wifi_command_vector;
-	std::vector<uint8_t> _uart_command_vector;
 };
