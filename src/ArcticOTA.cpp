@@ -26,25 +26,48 @@ ArcticOTA::ArcticOTA() {
 
 // Start: Create server and service
 void ArcticOTA::start(NimBLEServer* existingServer, NimBLEAdvertising* existingAdvertising) {
-	if (existingServer != nullptr) {
-		pServer = existingServer;
+	if (ArcticClient::arctic_interface == ARCTIC_BLUETOOTH) {
+		if (existingServer != nullptr) {
+			pServer = existingServer;
+		}
+		createService(existingAdvertising);
 	}
-	createService(existingAdvertising);
+}
+
+// Start: Create server and service
+void ArcticOTA::start() {
+	// Assign UUIDs for WiFi
+	if (ArcticClient::arctic_interface == ARCTIC_WIFI) {
+		uuid_ats = ARCTIC_UUID_WIFI_OTA_ATS;
+		uuid_txm = ARCTIC_UUID_WIFI_OTA_TX;
+		uuid_rxm = ARCTIC_UUID_WIFI_OTA_RX;
+	}
+
+	// Assign UUIDs for UART
+	if (ArcticClient::arctic_interface == ARCTIC_UART) {
+		uuid_ats = ARCTIC_UUID_UART_OTA_ATS;
+		uuid_txm = ARCTIC_UUID_UART_OTA_TX;
+		uuid_rxm = ARCTIC_UUID_UART_OTA_RX;
+	}
 }
 
 // Create service: Create console with TX, TXS, RX and Name Characteristics
 void ArcticOTA::createService(NimBLEAdvertising* existingAdvertising) {
-	NimBLEService* pService = pServer->createService("4fafc201-1fb5-459e-2000-c5c9c3319f00");
-	_txCharacteristic = pService->createCharacteristic("4fafc201-1fb5-459e-2000-c5c9c3319a00", NIMBLE_PROPERTY::NOTIFY); // TX
-	_rxCharacteristic = pService->createCharacteristic("4fafc201-1fb5-459e-2000-c5c9c3319b00", NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR); // RX
-	_rxCharacteristic->setCallbacks(new RxCharacteristicCallbacks(this));
-	pService->start(); // Start the service
-	existingAdvertising->addServiceUUID(pService->getUUID());
+
+	// Assign UUIDs for Bluetooth
+	if (ArcticClient::arctic_interface == ARCTIC_BLUETOOTH) {
+		NimBLEService* pService = pServer->createService(ARCTIC_UUID_BLE_OTA_ATS);
+		_txCharacteristic = pService->createCharacteristic(ARCTIC_UUID_BLE_OTA_TX, NIMBLE_PROPERTY::NOTIFY); // TX
+		_rxCharacteristic = pService->createCharacteristic(ARCTIC_UUID_BLE_OTA_RX, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR); // RX
+		_rxCharacteristic->setCallbacks(new RxCharacteristicCallbacks(this));
+		pService->start(); // Start the service
+		existingAdvertising->addServiceUUID(pService->getUUID());
+	}
 }
 
 // Updates new data flag
 void ArcticOTA::setNewDataAvailable(bool available, std::string command) {
-	// Process background commands for console
+	// Process backend commands for OTA
 	ArcticCommand com = ArcticCommand(command);
 	if (com.base() == "ARCTIC_COMMAND_OTA_SETUP") {
 		std::string size_str = com.arg("-s");
@@ -55,6 +78,20 @@ void ArcticOTA::setNewDataAvailable(bool available, std::string command) {
 		_ota_file_hash = hash_str;
 	}
 
+	// Bluetooth
+	if (ArcticClient::arctic_interface == ARCTIC_BLUETOOTH) {
+		// We do nothing becase the data is already handled by the callback
+	}
+
+	// WiFi
+	if (ArcticClient::arctic_interface == ARCTIC_WIFI) {
+		_wifi_command = command;
+	}
+
+	// UART
+	if (ArcticClient::arctic_interface == ARCTIC_UART) {
+		_uart_command = command;
+	}
 	newDataAvailable = available;
 }
 
@@ -99,9 +136,12 @@ bool ArcticOTA::available() {
 		}
 	}
 
-	bool available = newDataAvailable.load();
-	newDataAvailable = false;
-	return available;
+	newDataAvailable.load();
+	if (newDataAvailable) {
+		newDataAvailable = false;
+		return true;
+	}
+	return false;
 }
 
 // Send TX: Single line TX
@@ -113,35 +153,58 @@ void ArcticOTA::send(const char* format, ...) {
 	va_start(args, format);
 	vsnprintf(buffer, sizeof(buffer), format, args);
 
-	if (pServer->getConnectedCount() > 0) {
-		if (_txCharacteristic) {
-			_txCharacteristic->setValue((uint8_t*)buffer, strlen(buffer));
-			_txCharacteristic->notify();
+	// Bluetooth
+	if (ArcticClient::arctic_interface == ARCTIC_BLUETOOTH) {
+		if (pServer->getConnectedCount() > 0) {
+			if (_txCharacteristic) {
+				_txCharacteristic->setValue((uint8_t*)buffer, strlen(buffer));
+				_txCharacteristic->notify();
+			}
 		}
+	}
+
+	// WiFi
+	if (ArcticClient::arctic_interface == ARCTIC_WIFI) {
+		// Concatenate UUID and command
+		std::string wifi_command = uuid_txm + ":" + std::string(buffer);
+		ArcticClient::_uplink_client.println(wifi_command.c_str());
+	}
+
+	// UART
+	if (ArcticClient::arctic_interface == ARCTIC_UART) {
+		// Concatenate UUID and command
+		std::string uart_command = uuid_txm + ":" + std::string(buffer);
+		ArcticClient::_uart_port->println(uart_command.c_str());
 	}
 
 	va_end(args);
 }
 
-// Read RX: Read RX data until delimiter
-std::string ArcticOTA::read(char delimiter) {
-	if (_rxCharacteristic) {
-		std::string value = _rxCharacteristic->getValue();
-		std::stringstream valueStream(value);
-		std::string line;
-		std::getline(valueStream, line, delimiter);
-		return line;
-	}
-	return std::string();
-}
-
 // Read RX: Read raw RX data as vector
 std::vector<uint8_t> ArcticOTA::raw() {
-	if (_rxCharacteristic) {
-		std::string value = _rxCharacteristic->getValue();
-		std::vector<uint8_t> bytes(value.begin(), value.end());
+	// Bluetooth
+	if (ArcticClient::arctic_interface == ARCTIC_BLUETOOTH) {
+		if (_rxCharacteristic) {
+			std::string value = _rxCharacteristic->getValue();
+			std::vector<uint8_t> bytes(value.begin(), value.end());
+			return bytes;
+		}
+	}
+
+	// WiFi
+	if (ArcticClient::arctic_interface == ARCTIC_WIFI) {
+		// Convert WiFi command to bytes
+		std::vector<uint8_t> bytes(_wifi_command.begin(), _wifi_command.end());
 		return bytes;
 	}
+
+	// UART
+	if (ArcticClient::arctic_interface == ARCTIC_UART) {
+		// Convert UART command to bytes
+		std::vector<uint8_t> bytes(_uart_command.begin(), _uart_command.end());
+		return bytes;
+	}
+
 	return std::vector<uint8_t>();
 }
 
