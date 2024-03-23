@@ -398,7 +398,7 @@ void ArcticClient::server_task() {
 				// Send uplink keepalive periodically
 				if (millis() - _wifi_keepalive_timer > ARCTIC_DEFAULT_UART_KEEPALIVE_TIMEOUT) {
 					_wifi_keepalive_timer = millis();
-					_uplink_client.println(ARCTIC_DEFAULT_KEEPALIVE_SEQUENCE);
+					_uplink_client.print(ARCTIC_DEFAULT_KEEPALIVE_SEQUENCE);
 				}
 
 				// Send the ready notification
@@ -528,7 +528,7 @@ void ArcticClient::server_task() {
 			// Send uplink keepalive periodically
 			if (millis() - _uart_keepalive_timer > ARCTIC_DEFAULT_UART_KEEPALIVE_TIMEOUT) {
 				_uart_keepalive_timer = millis();
-				_uart_port->println(ARCTIC_DEFAULT_KEEPALIVE_SEQUENCE);
+				_uart_port->print(ARCTIC_DEFAULT_KEEPALIVE_SEQUENCE);
 			}
 
 			// Update connection status by timeout
