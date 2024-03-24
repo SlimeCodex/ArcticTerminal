@@ -105,6 +105,11 @@ void ArcticClient::add(ArcticTerminal& console) {
 	consoles.push_back(console);
 }
 
+// Add plotter to global map
+void ArcticClient::add(ArcticGraphics& graphic) {
+	graphics.push_back(graphic);
+}
+
 // Start: Start BLE server and advertising
 void ArcticClient::start() {
 
@@ -137,7 +142,7 @@ void ArcticClient::start() {
 		pAdvertising->addServiceUUID(pService->getUUID());
 #endif
 
-		// Create system (background) service
+		// Create system (backend) service
 		createService(pAdvertising);
 
 		// Start OTA service
@@ -146,6 +151,11 @@ void ArcticClient::start() {
 		// Start consoles
 		for (auto& console : consoles) {
 			console.get().start(pServer, pAdvertising);
+		}
+
+		// Start graphics
+		for (auto& graphic : graphics) {
+			graphic.get().start(pServer, pAdvertising);
 		}
 
 		// Start advertising
@@ -166,6 +176,12 @@ void ArcticClient::start() {
 		for (auto& console : consoles) {
 			console.get().start();
 		}
+
+		// Start graphics
+		for (auto& graphic : graphics) {
+			graphic.get().start();
+		}
+
 		ota.start();
 	}
 
@@ -179,6 +195,12 @@ void ArcticClient::start() {
 		for (auto& console : consoles) {
 			console.get().start();
 		}
+
+		// Start graphics
+		for (auto& graphic : graphics) {
+			graphic.get().start();
+		}
+
 		ota.start();
 	}
 }
@@ -286,7 +308,6 @@ void ArcticClient::server_task() {
 
 		std::string backend_tx = ARCTIC_UUID_WIFI_BACKEND_TX;
 		std::string backend_rx = ARCTIC_UUID_WIFI_BACKEND_RX;
-		std::string backend_ota_tx = ARCTIC_UUID_WIFI_OTA_TX;
 		std::string backend_ota_rx = ARCTIC_UUID_WIFI_OTA_RX;
 		std::string delg = ARCTIC_DEFAULT_PRIMARY_DELIMITER;
 		std::string delv = ARCTIC_DEFAULT_SECONDARY_DELIMITER;
@@ -349,6 +370,13 @@ void ArcticClient::server_task() {
 													 console.get().get_uuid_rxm() // UUID RXM
 										);
 										if (&console != &consoles.back()) response += delg;
+									}
+									for (auto& graphic : graphics) {
+										response += (graphic.get().get_name() + delv + // Name
+													 graphic.get().get_uuid_ats() + delv + // UUID ATS
+													 graphic.get().get_uuid_txm() // UUID TXM
+										);
+										if (&graphic != &graphics.back()) response += delg;
 									}
 									_uplink_client.print(response.c_str());
 									_uplink_client.print(ARCTIC_DEFAULT_SCAPE_SEQUENCE);
@@ -429,7 +457,6 @@ void ArcticClient::server_task() {
 				_uart_activity_timer = millis();
 				std::string backend_tx = ARCTIC_UUID_UART_BACKEND_TX;
 				std::string backend_rx = ARCTIC_UUID_UART_BACKEND_RX;
-				std::string backend_ota_tx = ARCTIC_UUID_UART_OTA_TX;
 				std::string backend_ota_rx = ARCTIC_UUID_UART_OTA_RX;
 				std::string delg = ARCTIC_DEFAULT_PRIMARY_DELIMITER;
 				std::string delv = ARCTIC_DEFAULT_SECONDARY_DELIMITER;
@@ -485,6 +512,13 @@ void ArcticClient::server_task() {
 											 console.get().get_uuid_rxm() // UUID RXM
 								);
 								if (&console != &consoles.back()) response += delg;
+							}
+							for (auto& graphic : graphics) {
+								response += (graphic.get().get_name() + delv + // Name
+											 graphic.get().get_uuid_ats() + delv + // UUID ATS
+											 graphic.get().get_uuid_txm() // UUID TXM
+								);
+								if (&graphic != &graphics.back()) response += delg;
 							}
 							_uart_port->print(response.c_str());
 							_uart_port->print(ARCTIC_DEFAULT_SCAPE_SEQUENCE);

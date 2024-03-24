@@ -16,6 +16,7 @@
  * along with ArcticTerminal. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <ArcticClient.h>
 #include <ArcticCallbacks.h>
 #include <ArcticTerminal.h>
 
