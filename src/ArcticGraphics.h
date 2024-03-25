@@ -37,6 +37,7 @@ public:
     void start();
 
     void plot(std::initializer_list<float> values);
+	void plot(std::string plot_name, std::initializer_list<float> values, std::initializer_list<std::string> labels);
 
 	int createService(NimBLEAdvertising* existingAdvertising);
 	int createServiceUUID();

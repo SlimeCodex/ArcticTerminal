@@ -260,6 +260,16 @@ void ArcticClient::setNewDataAvailable(bool available, std::string command) {
 				response += console.get().get_name();
 				if (&console != &consoles.back()) response += delv;
 			}
+
+			// Only add a delimiter if there are elements in both consoles and graphics
+			if (!consoles.empty() && !graphics.empty()) {
+				response += delv;
+			}
+
+			for (auto& graphic : graphics) {
+				response += graphic.get().get_name();
+				if (&graphic != &graphics.back()) response += delv;
+			}
 			_txCharacteristic->setValue(response);
 			_txCharacteristic->notify();
 		}
@@ -371,6 +381,7 @@ void ArcticClient::server_task() {
 										);
 										if (&console != &consoles.back()) response += delg;
 									}
+									response += delg;
 									for (auto& graphic : graphics) {
 										response += (graphic.get().get_name() + delv + // Name
 													 graphic.get().get_uuid_ats() + delv + // UUID ATS
@@ -513,6 +524,7 @@ void ArcticClient::server_task() {
 								);
 								if (&console != &consoles.back()) response += delg;
 							}
+							response += delg;
 							for (auto& graphic : graphics) {
 								response += (graphic.get().get_name() + delv + // Name
 											 graphic.get().get_uuid_ats() + delv + // UUID ATS

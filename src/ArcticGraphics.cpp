@@ -26,7 +26,7 @@ int ArcticGraphics::serviceCount = 0;
 ArcticGraphics::ArcticGraphics(const std::string& monitorName) {
 	_monitorName = monitorName;
 	pServer = nullptr;
-    serviceID = -1;
+	serviceID = -1;
 }
 
 // Start: Create server and service
@@ -106,60 +106,91 @@ int ArcticGraphics::createServiceUUID() {
 	return -1;
 }
 
+
 void ArcticGraphics::plot(std::initializer_list<float> values) {
+	this->plot(_monitorName, values, {});
+}
+
+void ArcticGraphics::plot(std::string plot_name, std::initializer_list<float> values, std::initializer_list<std::string> labels) {
 	if (!ArcticClient::arctic_connection_status) return;
 	if (!ArcticClient::arctic_uplink_enabled) return;
 	if (serviceID == -1) {
 		return;
 	}
 
-    std::string buffer;
-    for (auto value : values) {
-        if (!buffer.empty()) buffer += ",";
-        buffer += std::to_string(value);
-    }
+	// Check if the number of values and labels are equal
+	if (values.size() != labels.size()) {
+		return;
+	}
 
-    // Bluetooth
-    if (ArcticClient::arctic_interface == ARCTIC_BLUETOOTH) {
-        auto servicePair = services.find(serviceID);
-        if (servicePair != services.end()) {
-            if (pServer->getConnectedCount() > 0) {
-                NimBLECharacteristic* txCharacteristic = servicePair->second.txCharacteristic;
-                if (txCharacteristic) {
-                    txCharacteristic->setValue((uint8_t*)buffer.c_str(), buffer.length());
-                    txCharacteristic->notify(true);
-                }
+    std::string buffer = plot_name; // Start with the plot name
+
+    if (values.size() > 0) {
+        auto label_it = labels.begin();
+        for (auto value : values) {
+            if (label_it == labels.end()) {
+                break; // Break if there are no more labels
             }
+
+            if (&value != &*values.begin()) {
+                buffer += ARCTIC_DEFAULT_PRIMARY_DELIMITER;
+            }
+            buffer += std::to_string(value) + ARCTIC_DEFAULT_SECONDARY_DELIMITER + *label_it;
+
+            ++label_it; // Move to the next label
         }
+
+        // Handle any remaining labels that don't have corresponding values
+        while (label_it != labels.end()) {
+            buffer += ARCTIC_DEFAULT_PRIMARY_DELIMITER + std::string("NaN") + ARCTIC_DEFAULT_SECONDARY_DELIMITER + *label_it;
+            ++label_it;
+        }
+    } else {
+        // In case there are no values, append a default message or handle it appropriately
+        buffer += ARCTIC_DEFAULT_PRIMARY_DELIMITER + std::string("No data available");
     }
 
-    // WiFi
-    if (ArcticClient::arctic_interface == ARCTIC_WIFI) {
-        auto servicePair = serialServices.find(serviceID);
-        if (servicePair != serialServices.end()) {
-            // Concatenate the serial string with the buffer
-            std::string txString = servicePair->second.uuid_txm;
-            txString += ":";
-            txString += buffer;
+	// Bluetooth
+	if (ArcticClient::arctic_interface == ARCTIC_BLUETOOTH) {
+		auto servicePair = services.find(serviceID);
+		if (servicePair != services.end()) {
+			if (pServer->getConnectedCount() > 0) {
+				NimBLECharacteristic* txCharacteristic = servicePair->second.txCharacteristic;
+				if (txCharacteristic) {
+					txCharacteristic->setValue((uint8_t*)buffer.c_str(), buffer.length());
+					txCharacteristic->notify(true);
+				}
+			}
+		}
+	}
 
-            ArcticClient::_uplink_client.print(txString.c_str());
-            ArcticClient::_uplink_client.print(ARCTIC_DEFAULT_SCAPE_SEQUENCE);
-        }
-    }
+	// WiFi
+	if (ArcticClient::arctic_interface == ARCTIC_WIFI) {
+		auto servicePair = serialServices.find(serviceID);
+		if (servicePair != serialServices.end()) {
+			// Concatenate the serial string with the buffer
+			std::string txString = servicePair->second.uuid_txm;
+			txString += ":";
+			txString += buffer;
 
-    // UART
-    if (ArcticClient::arctic_interface == ARCTIC_UART) {
-        auto servicePair = serialServices.find(serviceID);
-        if (servicePair != serialServices.end()) {
-            // Concatenate the serial string with the buffer
-            std::string txString = servicePair->second.uuid_txm;
-            txString += ":";
-            txString += buffer;
+			ArcticClient::_uplink_client.print(txString.c_str());
+			ArcticClient::_uplink_client.print(ARCTIC_DEFAULT_SCAPE_SEQUENCE);
+		}
+	}
 
-            ArcticClient::_uplink_client.print(txString.c_str());
-            ArcticClient::_uplink_client.print(ARCTIC_DEFAULT_SCAPE_SEQUENCE);
-        }
-    }
+	// UART
+	if (ArcticClient::arctic_interface == ARCTIC_UART) {
+		auto servicePair = serialServices.find(serviceID);
+		if (servicePair != serialServices.end()) {
+			// Concatenate the serial string with the buffer
+			std::string txString = servicePair->second.uuid_txm;
+			txString += ":";
+			txString += buffer;
+
+			ArcticClient::_uart_port->print(txString.c_str());
+			ArcticClient::_uart_port->print(ARCTIC_DEFAULT_SCAPE_SEQUENCE);
+		}
+	}
 }
 
 std::string ArcticGraphics::get_name() {
