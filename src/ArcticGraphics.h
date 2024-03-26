@@ -36,8 +36,10 @@ public:
     void start(NimBLEServer* existingServer, NimBLEAdvertising* existingAdvertising);
     void start();
 
-    void plot(std::initializer_list<float> values);
-	void plot(std::string plot_name, std::initializer_list<float> values, std::initializer_list<std::string> labels);
+	void setup(const std::string& plot_name);
+	void setup(const std::string& plot_name, std::initializer_list<std::string> labels);
+	void setup(const std::string& plot_name, std::initializer_list<std::string> axles, std::initializer_list<std::string> labels);
+	void plot(std::string plot_name, std::initializer_list<float> values);
 
 	int createService(NimBLEAdvertising* existingAdvertising);
 	int createServiceUUID();
@@ -64,9 +66,17 @@ private:
 	static int serviceCount;
 	int serviceID;
 
+	std::string _plot_name;
+    struct PlotConfig {
+        std::vector<std::string> axles;
+        std::vector<std::string> labels;
+    };
+    std::map<std::string, PlotConfig> plotConfigs;
+
 	NimBLEServer* pServer;
 	NimBLEService* pService;
 
 	std::map<int, ServiceCharacteristics> services;
 	std::map<int, ServiceStringUUIDs> serialServices;
+
 };

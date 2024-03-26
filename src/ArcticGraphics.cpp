@@ -106,48 +106,52 @@ int ArcticGraphics::createServiceUUID() {
 	return -1;
 }
 
-
-void ArcticGraphics::plot(std::initializer_list<float> values) {
-	this->plot(_monitorName, values, {});
+void ArcticGraphics::setup(const std::string& plot_name) {	
+	plotConfigs[plot_name] = {std::vector<std::string>(), std::vector<std::string>()};
 }
 
-void ArcticGraphics::plot(std::string plot_name, std::initializer_list<float> values, std::initializer_list<std::string> labels) {
+void ArcticGraphics::setup(const std::string& plot_name, std::initializer_list<std::string> labels) {
+	plotConfigs[plot_name] = {std::vector<std::string>(), std::vector<std::string>(labels)};
+}
+
+void ArcticGraphics::setup(const std::string& plot_name, std::initializer_list<std::string> axles, std::initializer_list<std::string> labels) {
+    plotConfigs[plot_name] = {std::vector<std::string>(axles), std::vector<std::string>(labels)};
+}
+
+void ArcticGraphics::plot(std::string plot_name, std::initializer_list<float> values) {
 	if (!ArcticClient::arctic_connection_status) return;
 	if (!ArcticClient::arctic_uplink_enabled) return;
 	if (serviceID == -1) {
 		return;
 	}
 
-	// Check if the number of values and labels are equal
-	if (values.size() != labels.size()) {
-		return;
-	}
+    auto configIt = plotConfigs.find(plot_name);
+    if (configIt == plotConfigs.end()) {
+        // Plot configuration not found
+        return;
+    }
 
-    std::string buffer = plot_name; // Start with the plot name
+    const auto& config = configIt->second;
+    if (values.size() != config.labels.size()) {
+        // Values do not match the labels
+        return;
+    }
 
-    if (values.size() > 0) {
-        auto label_it = labels.begin();
-        for (auto value : values) {
-            if (label_it == labels.end()) {
-                break; // Break if there are no more labels
-            }
+    std::string buffer = plot_name + ARCTIC_DEFAULT_PRIMARY_DELIMITER;
 
-            if (&value != &*values.begin()) {
-                buffer += ARCTIC_DEFAULT_PRIMARY_DELIMITER;
-            }
-            buffer += std::to_string(value) + ARCTIC_DEFAULT_SECONDARY_DELIMITER + *label_it;
+    // Append the axles
+    for (const auto& axle : config.axles) {
+        buffer += axle + ARCTIC_DEFAULT_PRIMARY_DELIMITER;
+    }
 
-            ++label_it; // Move to the next label
+    // Append the labels:value pairs
+    auto label_it = config.labels.begin();
+    for (const auto& value : values) {
+        if (&value != &*values.begin()) {
+            buffer += ARCTIC_DEFAULT_PRIMARY_DELIMITER;
         }
-
-        // Handle any remaining labels that don't have corresponding values
-        while (label_it != labels.end()) {
-            buffer += ARCTIC_DEFAULT_PRIMARY_DELIMITER + std::string("NaN") + ARCTIC_DEFAULT_SECONDARY_DELIMITER + *label_it;
-            ++label_it;
-        }
-    } else {
-        // In case there are no values, append a default message or handle it appropriately
-        buffer += ARCTIC_DEFAULT_PRIMARY_DELIMITER + std::string("No data available");
+        buffer += *label_it + ARCTIC_DEFAULT_SECONDARY_DELIMITER + std::to_string(value);
+        ++label_it;
     }
 
 	// Bluetooth
