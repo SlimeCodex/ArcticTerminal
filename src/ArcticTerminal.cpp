@@ -28,6 +28,7 @@ ArcticTerminal::ArcticTerminal(const std::string& monitorName) {
 	_monitorName = monitorName;
 	pServer = nullptr;
 	serviceID = -1;
+	ArcticClient::add(*this);
 }
 
 // Start: Create server and service

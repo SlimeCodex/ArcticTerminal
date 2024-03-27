@@ -34,6 +34,9 @@ WiFiClient ArcticClient::_downlink_client;
 
 HardwareSerial* ArcticClient::_uart_port = nullptr;
 
+std::vector<std::reference_wrapper<ArcticTerminal>> ArcticClient::consoles;
+std::vector<std::reference_wrapper<ArcticGraphics>> ArcticClient::graphics;
+
 // Constructor for handler
 ArcticClient::ArcticClient(const std::string& bleDeviceName) {
 	_bleDeviceName = bleDeviceName;
@@ -50,12 +53,15 @@ void ArcticClient::begin(uint8_t interface) {
 			NimBLEDevice::init(_bleDeviceName);
 			pServer = NimBLEDevice::createServer();
 			pServer->setCallbacks(new ATCallbacks());
+			this->start();
 			break;
 		case ARCTIC_UART: // UART interface
 			ArcticClient::arctic_interface = ARCTIC_UART;
+			this->start();
 			break;
 		case ARCTIC_WIFI: // WiFi interface
 			ArcticClient::arctic_interface = ARCTIC_WIFI;
+			this->start();
 			break;
 	}
 }
@@ -102,12 +108,12 @@ void ArcticClient::arctic_server_task(void* pvParameters) {
 
 // Add console to global map
 void ArcticClient::add(ArcticTerminal& console) {
-	consoles.push_back(console);
+	ArcticClient::consoles.push_back(console);
 }
 
 // Add plotter to global map
 void ArcticClient::add(ArcticGraphics& graphic) {
-	graphics.push_back(graphic);
+	ArcticClient::graphics.push_back(graphic);
 }
 
 // Start: Start BLE server and advertising
@@ -258,17 +264,17 @@ void ArcticClient::setNewDataAvailable(bool available, std::string command) {
 			std::string response = command + delg;
 			for (auto& console : consoles) {
 				response += console.get().get_name();
-				if (&console != &consoles.back()) response += delv;
+				if (&console != &ArcticClient::consoles.back()) response += delv;
 			}
 
 			// Only add a delimiter if there are elements in both consoles and graphics
-			if (!consoles.empty() && !graphics.empty()) {
+			if (!ArcticClient::consoles.empty() && !ArcticClient::graphics.empty()) {
 				response += delv;
 			}
 
 			for (auto& graphic : graphics) {
 				response += graphic.get().get_name();
-				if (&graphic != &graphics.back()) response += delv;
+				if (&graphic != &ArcticClient::graphics.back()) response += delv;
 			}
 			_txCharacteristic->setValue(response);
 			_txCharacteristic->notify();
@@ -379,7 +385,7 @@ void ArcticClient::server_task() {
 													 console.get().get_uuid_txs() + delv + // UUID TXS
 													 console.get().get_uuid_rxm() // UUID RXM
 										);
-										if (&console != &consoles.back()) response += delg;
+										if (&console != &ArcticClient::consoles.back()) response += delg;
 									}
 									response += delg;
 									for (auto& graphic : graphics) {
@@ -387,7 +393,7 @@ void ArcticClient::server_task() {
 													 graphic.get().get_uuid_ats() + delv + // UUID ATS
 													 graphic.get().get_uuid_txm() // UUID TXM
 										);
-										if (&graphic != &graphics.back()) response += delg;
+										if (&graphic != &ArcticClient::graphics.back()) response += delg;
 									}
 									_uplink_client.print(response.c_str());
 									_uplink_client.print(ARCTIC_DEFAULT_SCAPE_SEQUENCE);
@@ -522,7 +528,7 @@ void ArcticClient::server_task() {
 											 console.get().get_uuid_txs() + delv + // UUID TXS
 											 console.get().get_uuid_rxm() // UUID RXM
 								);
-								if (&console != &consoles.back()) response += delg;
+								if (&console != &ArcticClient::consoles.back()) response += delg;
 							}
 							response += delg;
 							for (auto& graphic : graphics) {
@@ -530,7 +536,7 @@ void ArcticClient::server_task() {
 											 graphic.get().get_uuid_ats() + delv + // UUID ATS
 											 graphic.get().get_uuid_txm() // UUID TXM
 								);
-								if (&graphic != &graphics.back()) response += delg;
+								if (&graphic != &ArcticClient::graphics.back()) response += delg;
 							}
 							_uart_port->print(response.c_str());
 							_uart_port->print(ARCTIC_DEFAULT_SCAPE_SEQUENCE);

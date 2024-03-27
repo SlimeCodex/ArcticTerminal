@@ -116,8 +116,8 @@ public:
 	void disconnect();
 	static void arctic_server_task(void* pvParameters);
 	void server_task();
-	void add(ArcticTerminal& console); // Register data console
-	void add(ArcticGraphics& graphic); // Register graphics console
+	static void add(ArcticTerminal& console); // Register data console
+	static void add(ArcticGraphics& graphic); // Register graphics console
 	void start();
 	void profile(uint8_t profile);
 	void debug(bool enable);
@@ -148,8 +148,8 @@ private:
 	bool _ota_console = false;
 	NimBLEServer* pServer;
 	NimBLEAdvertising* pAdvertising;
-	std::vector<std::reference_wrapper<ArcticTerminal>> consoles;
-	std::vector<std::reference_wrapper<ArcticGraphics>> graphics;
+	static std::vector<std::reference_wrapper<ArcticTerminal>> consoles;
+	static std::vector<std::reference_wrapper<ArcticGraphics>> graphics;
 	uint32_t _bauds = ARCTIC_DEFAULT_BAUDS;
 	uint16_t _socket_port_uplink;
 	uint16_t _socket_port_downlink;
