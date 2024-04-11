@@ -36,6 +36,7 @@ HardwareSerial* ArcticClient::_uart_port = nullptr;
 
 std::vector<std::reference_wrapper<ArcticTerminal>> ArcticClient::consoles;
 std::vector<std::reference_wrapper<ArcticGraphics>> ArcticClient::graphics;
+std::vector<std::reference_wrapper<ArcticMap>> ArcticClient::maps;
 
 // Constructor for handler
 ArcticClient::ArcticClient(const std::string& bleDeviceName) {
@@ -116,6 +117,11 @@ void ArcticClient::add(ArcticGraphics& graphic) {
 	ArcticClient::graphics.push_back(graphic);
 }
 
+// Add map to global map
+void ArcticClient::add(ArcticMap& map) {
+	ArcticClient::maps.push_back(map);
+}
+
 // Start: Start BLE server and advertising
 void ArcticClient::start() {
 
@@ -164,6 +170,11 @@ void ArcticClient::start() {
 			graphic.get().start(pServer, pAdvertising);
 		}
 
+		// Start maps
+		for (auto& map : maps) {
+			map.get().start(pServer, pAdvertising);
+		}
+
 		// Start advertising
 		if (!pAdvertising->isAdvertising()) {
 			pAdvertising->start();
@@ -188,6 +199,12 @@ void ArcticClient::start() {
 			graphic.get().start();
 		}
 
+		// Start maps
+		for (auto& map : maps) {
+			map.get().start();
+		}
+
+		// Start OTA
 		ota.start();
 	}
 
@@ -207,6 +224,12 @@ void ArcticClient::start() {
 			graphic.get().start();
 		}
 
+		// Start maps
+		for (auto& map : maps) {
+			map.get().start();
+		}
+
+		// Start OTA
 		ota.start();
 	}
 }
@@ -262,20 +285,34 @@ void ArcticClient::setNewDataAvailable(bool available, std::string command) {
 		// Respond to services available
 		if (command == "ARCTIC_COMMAND_GET_SERVICES_NAME") {
 			std::string response = command + delg;
-			for (auto& console : consoles) {
-				response += console.get().get_name();
-				if (&console != &ArcticClient::consoles.back()) response += delv;
+
+			// Concatenate console names
+			if (!ArcticClient::consoles.empty()) {
+				for (auto& console : consoles) {
+					response += console.get().get_name();
+					if (&console != &ArcticClient::consoles.back()) response += delv;
+				}
 			}
 
-			// Only add a delimiter if there are elements in both consoles and graphics
-			if (!ArcticClient::consoles.empty() && !ArcticClient::graphics.empty()) {
+			// Concatenate graphic names
+			if (!ArcticClient::graphics.empty()) {
 				response += delv;
+				for (auto& graphic : graphics) {
+					response += graphic.get().get_name();
+					if (&graphic != &ArcticClient::graphics.back()) response += delv;
+				}
 			}
 
-			for (auto& graphic : graphics) {
-				response += graphic.get().get_name();
-				if (&graphic != &ArcticClient::graphics.back()) response += delv;
+			// Concatenate map names
+			if (!ArcticClient::maps.empty()) {
+				response += delv;
+				for (auto& map : maps) {
+					response += map.get().get_name();
+					if (&map != &ArcticClient::maps.back()) response += delv;
+				}
 			}
+
+			// Send response
 			_txCharacteristic->setValue(response);
 			_txCharacteristic->notify();
 		}
@@ -394,6 +431,14 @@ void ArcticClient::server_task() {
 													 graphic.get().get_uuid_txm() // UUID TXM
 										);
 										if (&graphic != &ArcticClient::graphics.back()) response += delg;
+									}
+									response += delg;
+									for (auto& map : maps) {
+										response += (map.get().get_name() + delv + // Name
+													 map.get().get_uuid_ats() + delv + // UUID ATS
+													 map.get().get_uuid_txm() // UUID TXM
+										);
+										if (&map != &ArcticClient::maps.back()) response += delg;
 									}
 									_uplink_client.print(response.c_str());
 									_uplink_client.print(ARCTIC_DEFAULT_SCAPE_SEQUENCE);
@@ -537,6 +582,14 @@ void ArcticClient::server_task() {
 											 graphic.get().get_uuid_txm() // UUID TXM
 								);
 								if (&graphic != &ArcticClient::graphics.back()) response += delg;
+							}
+							response += delg;
+							for (auto& map : maps) {
+								response += (map.get().get_name() + delv + // Name
+											 map.get().get_uuid_ats() + delv + // UUID ATS
+											 map.get().get_uuid_txm() // UUID TXM
+								);
+								if (&map != &ArcticClient::maps.back()) response += delg;
 							}
 							_uart_port->print(response.c_str());
 							_uart_port->print(ARCTIC_DEFAULT_SCAPE_SEQUENCE);

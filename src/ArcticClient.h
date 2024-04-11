@@ -37,6 +37,7 @@
 #include <ArcticTerminal.h>
 #include <ArcticPatterns.h>
 #include <ArcticGraphics.h>
+#include <ArcticMap.h>
 
 // Enumeration for connection profiles
 #define ARCTIC_PROFILE_HIGH_SPEED 0x00 // default
@@ -118,6 +119,7 @@ public:
 	void server_task();
 	static void add(ArcticTerminal& console); // Register data console
 	static void add(ArcticGraphics& graphic); // Register graphics console
+	static void add(ArcticMap& map); // Register map console
 	void start();
 	void profile(uint8_t profile);
 	void debug(bool enable);
@@ -150,6 +152,7 @@ private:
 	NimBLEAdvertising* pAdvertising;
 	static std::vector<std::reference_wrapper<ArcticTerminal>> consoles;
 	static std::vector<std::reference_wrapper<ArcticGraphics>> graphics;
+	static std::vector<std::reference_wrapper<ArcticMap>> maps;
 	uint32_t _bauds = ARCTIC_DEFAULT_BAUDS;
 	uint16_t _socket_port_uplink;
 	uint16_t _socket_port_downlink;
