@@ -1,6 +1,6 @@
 /*
  * This file is part of ArcticMap Library.
- * Copyright (C) 2023 Alejandro Nicolini
+ * Copyright (C) 2024 Alejandro Nicolini
  *
  * ArcticMap is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
