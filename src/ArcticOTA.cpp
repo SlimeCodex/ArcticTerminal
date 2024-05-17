@@ -77,22 +77,39 @@ void ArcticOTA::setNewDataAvailable(bool available, std::string command) {
 		_ota_file_size = size;
 		_ota_file_hash = hash_str;
 	}
+	newDataAvailable = available;
 
 	// Bluetooth
 	if (ArcticClient::arctic_interface == ARCTIC_BLUETOOTH) {
-		// We do nothing becase the data is already handled by the callback
+		if (this->available()) {
+			if (this->download()) {
+				delay(500);
+				ESP.restart();
+			}
+		}
 	}
 
 	// WiFi
 	if (ArcticClient::arctic_interface == ARCTIC_WIFI) {
 		_wifi_command = command;
+		if (this->available()) {
+			if (this->download()) {
+				delay(500);
+				ESP.restart();
+			}
+		}
 	}
 
 	// UART
 	if (ArcticClient::arctic_interface == ARCTIC_UART) {
 		_uart_command = command;
+		if (this->available()) {
+			if (this->download()) {
+				delay(500);
+				ESP.restart();
+			}
+		}
 	}
-	newDataAvailable = available;
 }
 
 // Available RX: Check if new data is available

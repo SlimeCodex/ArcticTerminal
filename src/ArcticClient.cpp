@@ -345,8 +345,8 @@ void ArcticClient::server_task() {
 
 	// Bluetooth
 	if (ArcticClient::arctic_interface == ARCTIC_BLUETOOTH) {
-		// Process is handled by NimBLE
 		while (1) {
+			// We do nothing becase the data is already handled by the callback
 			vTaskDelay(pdMS_TO_TICKS(1000));
 		}
 	}
