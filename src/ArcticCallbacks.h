@@ -54,30 +54,46 @@ public:
 };
 
 // Callback RX per console
-class RxCharacteristicCallbacks : public NimBLECharacteristicCallbacks {
+class RxCharacteristicCallbacksBackend : public NimBLECharacteristicCallbacks {
 	ArcticClient* handler_instance;
-	ArcticTerminal* console_instance;
-	ArcticOTA* ota_instance;
 
 public:
-	RxCharacteristicCallbacks(ArcticTerminal* console) {
-		console_instance = console;
-	}
-	RxCharacteristicCallbacks(ArcticClient* handler) {
+	RxCharacteristicCallbacksBackend(ArcticClient* handler) {
 		handler_instance = handler;
 	}
-	RxCharacteristicCallbacks(ArcticOTA* ota) {
-		ota_instance = ota;
+	void onWrite(NimBLECharacteristic* pCharacteristic) {
+		if (handler_instance) {
+			handler_instance->setNewDataAvailable(true, pCharacteristic->getValue());
+		}
+	}
+};
+
+// Callback RX per console
+class RxCharacteristicCallbacksConsole : public NimBLECharacteristicCallbacks {
+	ArcticTerminal* console_instance;
+
+public:
+	RxCharacteristicCallbacksConsole(ArcticTerminal* console) {
+		console_instance = console;
 	}
 	void onWrite(NimBLECharacteristic* pCharacteristic) {
 		if (console_instance) {
 			console_instance->setNewDataAvailable(true, pCharacteristic->getValue());
 		}
+	}
+};
+
+// Callback RX per console
+class RxCharacteristicCallbacksOTA : public NimBLECharacteristicCallbacks {
+	ArcticOTA* ota_instance;
+
+public:
+	RxCharacteristicCallbacksOTA(ArcticOTA* ota) {
+		ota_instance = ota;
+	}
+	void onWrite(NimBLECharacteristic* pCharacteristic) {
 		if (ota_instance) {
 			ota_instance->setNewDataAvailable(true, pCharacteristic->getValue());
-		}
-		if (handler_instance) {
-			handler_instance->setNewDataAvailable(true, pCharacteristic->getValue());
 		}
 	}
 };

@@ -73,7 +73,7 @@ int ArcticTerminal::createService(NimBLEAdvertising* existingAdvertising) {
 		char rxCharUUID[37];
 		snprintf(rxCharUUID, sizeof(rxCharUUID), ARCTIC_UUID_BLE_CONSOLE_RX, serviceCount, serviceCount);
 		NimBLECharacteristic* rxCharacteristic = pService->createCharacteristic(rxCharUUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
-		rxCharacteristic->setCallbacks(new RxCharacteristicCallbacks(this));
+		rxCharacteristic->setCallbacks(new RxCharacteristicCallbacksConsole(this));
 
 		// Start the service
 		pService->start();

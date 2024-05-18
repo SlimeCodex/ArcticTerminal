@@ -127,6 +127,10 @@ void ArcticClient::start() {
 
 	// Bluetooth
 	if (ArcticClient::arctic_interface == ARCTIC_BLUETOOTH) {
+
+		// Start BLE server, primarily for OTA
+		xTaskCreatePinnedToCore(arctic_server_task, "ArcticServerTask", 4096, this, 1, NULL, 0);
+
 		// Initialize services and characteristics
 		pAdvertising = NimBLEDevice::getAdvertising();
 
@@ -265,7 +269,7 @@ void ArcticClient::createService(NimBLEAdvertising* existingAdvertising) {
 	NimBLEService* pService = pServer->createService(ARCTIC_UUID_BLE_BACKEND_ATS);
 	_txCharacteristic = pService->createCharacteristic(ARCTIC_UUID_BLE_BACKEND_TX, NIMBLE_PROPERTY::NOTIFY); // TX
 	_rxCharacteristic = pService->createCharacteristic(ARCTIC_UUID_BLE_BACKEND_RX, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR); // RX
-	_rxCharacteristic->setCallbacks(new RxCharacteristicCallbacks(this));
+	_rxCharacteristic->setCallbacks(new RxCharacteristicCallbacksBackend(this));
 	pService->start(); // Start the service
 	existingAdvertising->addServiceUUID(pService->getUUID());
 }
@@ -346,8 +350,13 @@ void ArcticClient::server_task() {
 	// Bluetooth
 	if (ArcticClient::arctic_interface == ARCTIC_BLUETOOTH) {
 		while (1) {
-			// We do nothing becase the data is already handled by the callback
-			vTaskDelay(pdMS_TO_TICKS(1000));
+			if (ota.available()) {
+				if (ota.download()) {
+					delay(500);
+					ESP.restart();
+				}
+			}
+			vTaskDelay(pdMS_TO_TICKS(10));
 		}
 	}
 
@@ -395,6 +404,12 @@ void ArcticClient::server_task() {
 							// OTA has priority
 							if (uuid.compare(backend_ota_rx) == 0) {
 								ota.setNewDataAvailable(true, com);
+								if (ota.available()) {
+									if (ota.download()) {
+										delay(500);
+										ESP.restart();
+									}
+								}
 								continue;
 							}
 
@@ -547,6 +562,12 @@ void ArcticClient::server_task() {
 					// OTA has priority
 					if (uuid.compare(backend_ota_rx) == 0) {
 						ota.setNewDataAvailable(true, com);
+						if (ota.available()) {
+							if (ota.download()) {
+								delay(500);
+								ESP.restart();
+							}
+						}
 						continue;
 					}
 

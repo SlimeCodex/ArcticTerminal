@@ -59,7 +59,7 @@ void ArcticOTA::createService(NimBLEAdvertising* existingAdvertising) {
 		NimBLEService* pService = pServer->createService(ARCTIC_UUID_BLE_OTA_ATS);
 		_txCharacteristic = pService->createCharacteristic(ARCTIC_UUID_BLE_OTA_TX, NIMBLE_PROPERTY::NOTIFY); // TX
 		_rxCharacteristic = pService->createCharacteristic(ARCTIC_UUID_BLE_OTA_RX, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR); // RX
-		_rxCharacteristic->setCallbacks(new RxCharacteristicCallbacks(this));
+		_rxCharacteristic->setCallbacks(new RxCharacteristicCallbacksOTA(this));
 		pService->start(); // Start the service
 		existingAdvertising->addServiceUUID(pService->getUUID());
 	}
@@ -78,38 +78,6 @@ void ArcticOTA::setNewDataAvailable(bool available, std::string command) {
 		_ota_file_hash = hash_str;
 	}
 	newDataAvailable = available;
-
-	// Bluetooth
-	if (ArcticClient::arctic_interface == ARCTIC_BLUETOOTH) {
-		if (this->available()) {
-			if (this->download()) {
-				delay(500);
-				ESP.restart();
-			}
-		}
-	}
-
-	// UART
-	if (ArcticClient::arctic_interface == ARCTIC_UART) {
-		_uart_command = command;
-		if (this->available()) {
-			if (this->download()) {
-				delay(500);
-				ESP.restart();
-			}
-		}
-	}
-
-	// WiFi
-	if (ArcticClient::arctic_interface == ARCTIC_WIFI) {
-		_wifi_command = command;
-		if (this->available()) {
-			if (this->download()) {
-				delay(500);
-				ESP.restart();
-			}
-		}
-	}
 }
 
 // Available RX: Check if new data is available
@@ -156,6 +124,8 @@ bool ArcticOTA::available() {
 	newDataAvailable.load();
 	if (newDataAvailable) {
 		newDataAvailable = false;
+		if (_debug_enabled)
+			Serial.println("New data available");
 		return true;
 	}
 	return false;
@@ -176,6 +146,9 @@ void ArcticOTA::send(const char* format, ...) {
 			if (_txCharacteristic) {
 				_txCharacteristic->setValue((uint8_t*)buffer, strlen(buffer));
 				_txCharacteristic->notify();
+				if (_debug_enabled) {
+					Serial.printf("TX: %s\n", buffer);
+				}
 			}
 		}
 	}
@@ -185,6 +158,9 @@ void ArcticOTA::send(const char* format, ...) {
 		// Concatenate UUID and command
 		std::string wifi_command = uuid_txm + ":" + std::string(buffer);
 		ArcticClient::_uplink_client.println(wifi_command.c_str());
+		if (_debug_enabled) {
+			Serial.printf("TX: %s\n", buffer);
+		}
 	}
 
 	// UART
@@ -192,6 +168,9 @@ void ArcticOTA::send(const char* format, ...) {
 		// Concatenate UUID and command
 		std::string uart_command = uuid_txm + ":" + std::string(buffer);
 		ArcticClient::_uart_port->println(uart_command.c_str());
+		if (_debug_enabled) {
+			Serial.printf("TX: %s\n", buffer);
+		}
 	}
 
 	va_end(args);
