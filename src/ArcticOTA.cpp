@@ -89,9 +89,9 @@ void ArcticOTA::setNewDataAvailable(bool available, std::string command) {
 		}
 	}
 
-	// WiFi
-	if (ArcticClient::arctic_interface == ARCTIC_WIFI) {
-		_wifi_command = command;
+	// UART
+	if (ArcticClient::arctic_interface == ARCTIC_UART) {
+		_uart_command = command;
 		if (this->available()) {
 			if (this->download()) {
 				delay(500);
@@ -100,9 +100,9 @@ void ArcticOTA::setNewDataAvailable(bool available, std::string command) {
 		}
 	}
 
-	// UART
-	if (ArcticClient::arctic_interface == ARCTIC_UART) {
-		_uart_command = command;
+	// WiFi
+	if (ArcticClient::arctic_interface == ARCTIC_WIFI) {
+		_wifi_command = command;
 		if (this->available()) {
 			if (this->download()) {
 				delay(500);
