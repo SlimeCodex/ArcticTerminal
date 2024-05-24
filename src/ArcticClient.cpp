@@ -321,6 +321,15 @@ void ArcticClient::setNewDataAvailable(bool available, std::string command) {
 			_txCharacteristic->notify();
 		}
 
+		// Send BLE RSSI
+		if (command == "ARCTIC_COMMAND_GET_RSSI") {
+			std::string response = command + delg;
+			response += "0"; // TODO: NimBLEDevice::getRSSI();
+
+			_txCharacteristic->setValue(response);
+			_txCharacteristic->notify();
+		}
+
 		// Enable data uplink
 		if (command == "ARCTIC_COMMAND_ENABLE_UPLINK") {
 			std::string response = command + delg;
@@ -457,6 +466,15 @@ void ArcticClient::server_task() {
 									}
 									_uplink_client.print(response.c_str());
 									_uplink_client.print(ARCTIC_DEFAULT_SCAPE_SEQUENCE);
+									continue;
+								}
+
+								// Send WiFi RSSI
+								if (com == "ARCTIC_COMMAND_GET_RSSI") {
+									std::string response = backend_tx + delg + com + delg;
+									response += WiFi.RSSI();
+
+									_uplink_client.println(response.c_str());
 									continue;
 								}
 

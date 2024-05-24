@@ -122,6 +122,8 @@ void ArcticMap::location(double latitude, double longitude) {
 				NimBLECharacteristic* txCharacteristic = servicePair->second.txCharacteristic;
 				if (txCharacteristic) {
                     std::string buffer = std::to_string(latitude) + "," + std::to_string(longitude);
+					
+					txCharacteristic->setValue(buffer);
 					txCharacteristic->notify(true);
 				}
 			}
